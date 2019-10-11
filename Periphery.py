@@ -5,6 +5,18 @@ def BF_sgnchange(y,doFind = 0):
     indexs = np.where((np.multiply(y[1:],y[0:len(y)-1]) < 0))
     return indexs
 
+def BF_makeBuffer(y, bufferSize):
+
+    N = len(y)
+
+    numBuffers = int(np.floor(N / bufferSize))
+
+    y_buffer = y[0:numBuffers*bufferSize]
+
+    y_buffer = y_buffer.reshape((numBuffers,bufferSize))
+
+    return y_buffer
+
 def BF_embed(y,tau = 1,m = 2,makeSignal = 0,randomSeed = [],beVocal = 0):
 
     N = len(y)

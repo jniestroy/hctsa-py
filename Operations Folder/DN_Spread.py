@@ -1,3 +1,4 @@
+#@numba.jit(nopython=True,parallel=True)
 def DN_Spread(y,spreadMeasure = 'std'):
     if spreadMeasure == 'std':
         return np.std(y)

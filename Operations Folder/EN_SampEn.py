@@ -1,7 +1,12 @@
 import numpy as np
-def EN_SampEn(y,M = 2,r = 'empty',pre = ''):
-    if r == 'empty':
+import numba
+
+@numba.jit(nopython=True,parallel=True)
+def EN_SampEn(y,M = 2,r = 0,pre = ''):
+    if r == 0:
         r = .1*np.std(y)
+    # else:
+    #     r = r*np.std(y)
     M = M + 1
     N = len(y)
     lastrun = np.zeros(N)
@@ -38,11 +43,11 @@ def EN_SampEn(y,M = 2,r = 'empty',pre = ''):
         p[m] = A[m] / B[m-1]
         e[m] = -np.log(p[m])
     i = 0
-    out = {}
+    out = {'sampen':np.zeros(len(e)),'quadSampEn':np.zeros(len(e))}
     for ent in e:
         quaden1 = ent + np.log(2*r)
-        out['sampen' + str(i)] = ent
-        out['quadSampEn' + str(i)] = quaden1
+        out['sampen'][i] = ent
+        out['quadSampEn'][i] = quaden1
         i = i + 1
 
     return out

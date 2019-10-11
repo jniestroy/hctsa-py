@@ -1,3 +1,4 @@
+#@numba.jit(nopython=True,parallel=True)
 def EN_ShannonEn(y):
     p = np.zeros(len(np.unique(y)))
     n = 0

@@ -1,9 +1,11 @@
 import itertools
-def EN_PermEn(y,m,tau):
+import numba
+
+@numba.jit(nopython=True,parallel=True)
+def EN_PermEn(y,m = 2,tau = 1):
 
     x = BF_embed(y,tau,m)
 
-    print(x)
 
     Nx = x.shape[0]
 
@@ -15,7 +17,7 @@ def EN_PermEn(y,m,tau):
 
     for j in range(Nx):
         ix = np.argsort(x[j,:])
-        print(ix)
+
         for k in range(numPerms):
             if not (permList[k,:] - ix).all() :
                 countPerms[k] = countPerms[k] + 1

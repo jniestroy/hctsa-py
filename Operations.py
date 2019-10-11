@@ -1,9 +1,11 @@
 import itertools
-def EN_PermEn(y,m,tau):
+import numba
+
+@numba.jit(nopython=True,parallel=True)
+def EN_PermEn(y,m = 2,tau = 1):
 
     x = BF_embed(y,tau,m)
 
-    print(x)
 
     Nx = x.shape[0]
 
@@ -15,7 +17,7 @@ def EN_PermEn(y,m,tau):
 
     for j in range(Nx):
         ix = np.argsort(x[j,:])
-        print(ix)
+
         for k in range(numPerms):
             if not (permList[k,:] - ix).all() :
                 countPerms[k] = countPerms[k] + 1
@@ -43,8 +45,12 @@ def perms(n):
     return(permut_array)
 
 def DN_Moments(y,theMom = 1):
-    return stats.moment(y,theMom) / np.std(y)
+    if np.std(y) != 0:
+        return stats.moment(y,theMom) / np.std(y)
+    else:
+        return 0
 
+#@numba.jit(nopython=True,parallel=True)
 def DN_Withinp(x,p = 1,meanOrMedian = 'mean'):
     N = len(x)
 
@@ -56,11 +62,13 @@ def DN_Withinp(x,p = 1,meanOrMedian = 'mean'):
         sig = 1.35*stats.iqr(x)
     else:
         raise Exception('Unknown meanOrMedian should be mean or median')
-    return sum((x >= mu-p*sig) & (x <= mu + p*sig)) / N
+    return np.sum((x >= mu-p*sig) & (x <= mu + p*sig)) / N
 
+#@numba.jit(nopython=True)
+#Quantile function seems to be slower with numba
 def DN_Quantile(y,q = .5):
-    if not isinstance(y,np.ndarray):
-        y = np.asarray(y)
+    # if not isinstance(y,np.ndarray):
+    #     y = np.asarray(y)
     return(np.quantile(y,q))
 
 def DN_RemovePoints(y,removeHow = 'absfar',p = .99):
@@ -82,7 +90,7 @@ def DN_RemovePoints(y,removeHow = 'absfar',p = .99):
     y_trim = y[rKeep]
 
     #print(rKeep)
-    print(y_trim)
+
 
     acf_y = SUB_acf(y,8)
     acf_y_trim = SUB_acf(y_trim,8)
@@ -109,7 +117,8 @@ def DN_RemovePoints(y,removeHow = 'absfar',p = .99):
 
     out['std'] = np.std(y_trim)
 
-    out['skewnessrat'] = stats.skew(y_trim)/stats.skew(y)
+    if stats.skew(y) != 0:
+        out['skewnessrat'] = stats.skew(y_trim)/stats.skew(y)
 
     out['kurtosisrat'] = stats.kurtosis(y_trim)/stats.kurtosis(y)
 
@@ -158,15 +167,18 @@ def DN_OutlierInclude(y,thresholdHow='abs',inc=.01):
 
         return msDt
 
+@numba.jit(nopython=True,parallel=True)
 def DN_Burstiness(y):
     r = np.std(y) / y.mean()
     B = ( r - 1 ) / ( r + 1 )
     return(B)
 
+#@numba.jit(nopython=True,parallel=True)
+#oddly this function slows down with numba
 def DN_pleft(y,th = .1):
 
     p  = np.quantile(np.absolute(y - np.mean(y)),1-th)
-    
+
 
     return p / np.std(y)
 
@@ -201,7 +213,10 @@ def CO_FirstMin(y, minWhat = 'ac'):
             return i-1
     return N
 
-def DN_CompareKSFit(x,whatDist):
+def DN_IQR(y):
+    return stats.iqr(y)
+
+def DN_CompareKSFit(x,whatDist = 'norm'):
     xStep = np.std(x) / 100
     if whatDist == 'norm':
         a, b = stats.norm.fit(x)
@@ -285,12 +300,17 @@ def DN_Mode(y):
     #y must be numpy array
     if not isinstance(y,np.ndarray):
         y = np.asarray(y)
-    return(stats.mode(y))
+    return float(stats.mode(y).mode)
 
 import numpy as np
-def EN_SampEn(y,M = 2,r = 'empty',pre = ''):
-    if r == 'empty':
+import numba
+
+@numba.jit(nopython=True,parallel=True)
+def EN_SampEn(y,M = 2,r = 0,pre = ''):
+    if r == 0:
         r = .1*np.std(y)
+    # else:
+    #     r = r*np.std(y)
     M = M + 1
     N = len(y)
     lastrun = np.zeros(N)
@@ -327,11 +347,11 @@ def EN_SampEn(y,M = 2,r = 'empty',pre = ''):
         p[m] = A[m] / B[m-1]
         e[m] = -np.log(p[m])
     i = 0
-    out = {}
+    out = {'sampen':np.zeros(len(e)),'quadSampEn':np.zeros(len(e))}
     for ent in e:
         quaden1 = ent + np.log(2*r)
-        out['sampen' + str(i)] = ent
-        out['quadSampEn' + str(i)] = quaden1
+        out['sampen'][i] = ent
+        out['quadSampEn'][i] = quaden1
         i = i + 1
 
     return out
@@ -368,10 +388,13 @@ def LinearFit(xData,yData):
     return m,b
 
 import numpy as np
+import numba
+
+@numba.jit(nopython=True,parallel=True)
 def DN_Mean(y):
     #y must be numpy array
-    if not isinstance(y,np.ndarray):
-        y = np.asarray(y)
+    # if not isinstance(y,np.ndarray):
+    #     y = np.asarray(y)
     return(y.mean())
 
 def CO_glscf(y,alpha = 1.0,beta = 1.0,tau = ''):
@@ -384,7 +407,8 @@ def CO_glscf(y,alpha = 1.0,beta = 1.0,tau = ''):
     y2 = np.absolute(y[tau:N])
     top = np.mean(np.multiply(np.power(y1,alpha),np.power(y2,beta))) - np.mean(np.power(y1,alpha)) * np.mean(np.power(y2,beta))
     bot =  np.sqrt(np.mean(np.power(y1,2*alpha)) - np.mean(np.power(y1,alpha))**2) * np.sqrt(np.mean(np.power(y2,2*beta)) - np.mean(np.power(y2,beta))**2)
-
+    if bot == 0:
+        return np.inf
     glscf = top / bot
     return glscf
 
@@ -399,6 +423,9 @@ def DN_Cumulants(y,cumWhatMay = 'skew1'):
         return stats.kurtosis(y,0)
     else:
          raise Exception('Requested Unknown cumulant must be: skew1, skew2, kurt1, or kurt2')
+
+def DN_Range(y):
+    return np.max(y) - np.min(y)
 
 from Periphery import *
 def DN_FitKernalSmooth(x,varargin = {}):
@@ -459,12 +486,14 @@ def DN_FitKernalSmooth(x,varargin = {}):
     return out
 
 import numpy as np
+@numba.jit(nopython=True)
 def DN_Median(y):
     #y must be numpy array
-    if not isinstance(y,np.ndarray):
-        y = np.asarray(y)
+    # if not isinstance(y,np.ndarray):
+    #     y = np.asarray(y)
     return(np.median(y))
 
+#@numba.jit(nopython=True,parallel=True)
 def DN_Spread(y,spreadMeasure = 'std'):
     if spreadMeasure == 'std':
         return np.std(y)
@@ -482,22 +511,71 @@ def mad(data, axis=None):
 def mead(data, axis=None):
     return np.median(np.absolute(data - np.median(data, axis)), axis)
 
+@numba.jit(nopython=True,parallel=True)
 def DN_MinMax(y,which = 'max'):
-    if not isinstance(y,np.ndarray):
-        y = np.asarray(y)
+    # if not isinstance(y,np.ndarray):
+    #     y = np.asarray(y)
     if which == 'min':
         return(y.min())
     else:
         return(y.max())
 
+@numba.jit(nopython=True,parallel=True)
 def DN_CustomSkewness(y,whatSkew = 'pearson'):
     if whatSkew == 'pearson':
-        return (3*np.mean(y) - np.median(y)) / np.std(y)
+        if np.std(y) != 0:
+            return (3*np.mean(y) - np.median(y)) / np.std(y)
+        else:
+            return 0
     elif whatSkew == 'bowley':
         qs = np.quantile(y,[.25,.5,.75])
-        return (qs[2] + qs[0] - 2*qs[1]) / (qs[2] - qs[0])
+        if np.std(y) != 0:
+            return (qs[2] + qs[0] - 2*qs[1]) / (qs[2] - qs[0])
+        else:
+            return 0
+
     else:
-         raise Exception('whatSkew must be either pearson or bowley. whatSkew: ' + str(whatSkew))
+         raise Exception('whatSkew must be either pearson or bowley.')
+
+def EN_mse(y,scale=range(1,11),m=2,r=.15,adjust_r=True):
+
+    minTSLength = 20
+    numscales = len(scale)
+    y_cg = []
+
+    for i in range(numscales):
+        bufferSize = scale[i]
+        y_buffer = BF_makeBuffer(y,bufferSize)
+        y_cg.append(np.mean(y_buffer,1))
+
+    outEns = []
+
+    for si in range(numscales):
+        if len(y_cg[si]) >= minTSLength:
+            sampEnStruct = EN_SampEn(y_cg[si],m,r)
+            outEns.append(sampEnStruct)
+        else:
+            outEns.append(np.nan)
+    sampEns = []
+    for out in outEns:
+        sampEns.append(out['sampen'][1])
+
+    maxSampen = np.max(sampEns)
+    maxIndx = np.argmax(sampEns)
+
+    minSampen = np.min(sampEns)
+    minIndx = np.argmin(sampEns)
+
+    meanSampen = np.mean(sampEns)
+
+    stdSampen = np.std(sampEns)
+
+    meanchSampen = np.mean(np.diff(sampEns))
+
+    out = {'sampEns':sampEns,'max Samp En':maxSampen,'max point':scale[maxIndx],'min Samp En':minSampen,\
+    'min point':scale[minIndx],'mean Samp En':meanSampen,'std Samp En':stdSampen, 'Mean Change':meanchSampen}
+
+    return out
 
 def IN_AutoMutualInfo(y,timeDelay = 1,estMethod = 'gaussian',extraParam = []):
     if isinstance(timeDelay,str):
@@ -510,13 +588,16 @@ def IN_AutoMutualInfo(y,timeDelay = 1,estMethod = 'gaussian',extraParam = []):
         numTimeDelays = 1
         timeDelay = [timeDelay]
     amis = []
+    out = {}
     for k in range(numTimeDelays):
         y1 = y[0:N-timeDelay[k]]
         y2 = y[timeDelay[k]:N]
         if estMethod == 'gaussian':
             r = np.corrcoef(y1,y2)[1,0]
             amis.append(-.5 * np.log(1 - r**2))
-    return amis
+            out['Auto Mutual ' + str(timeDelay[k])] = -.5 * np.log(1 - r**2)
+
+    return out
 
 def EN_CID(y):
 
@@ -551,11 +632,14 @@ def DT_IsSeasonal(y):
     th_fit = 0.3
     th_ampl = 0.5
 
-    params, params_covariance = optimize.curve_fit(test_func, np.arange(N), y, p0=[10, 13,600,0])
+    try:
+        params, params_covariance = optimize.curve_fit(test_func, np.arange(N), y, p0=[10, 13,600,0])
+    except:
+        return False
 
     a,b,c,d = params
 
-    print(params)
+
 
     y_pred = a * np.sin(b * np.arange(N) + d) + c
 
@@ -563,9 +647,9 @@ def DT_IsSeasonal(y):
     SSr = sum(np.power(y - y_pred,2))
 
     R = 1 - SSr / SST
-    print(R)
 
-    if R > th_fit and (np.absolute(a) > th_ampl*.1*np.std(y)):
+
+    if R > th_fit: #and (np.absolute(a) > th_ampl*.1*np.std(y)):
         return True
     else:
         return False
@@ -573,6 +657,7 @@ def DT_IsSeasonal(y):
 def test_func(x, a, b,c,d):
     return a * np.sin(b * x + d) + c
 
+#@numba.jit(nopython=True,parallel=True)
 def EN_ApEn(y,mnom = 1,rth = .2):
 
     r = rth * np.std(y)
@@ -581,6 +666,7 @@ def EN_ApEn(y,mnom = 1,rth = .2):
 
     for k in range(2):
         m = mnom + k
+        m = int(m)
         C = np.zeros(N-m+1)
 
         x = np.zeros((N - m + 1, m))
@@ -590,7 +676,7 @@ def EN_ApEn(y,mnom = 1,rth = .2):
 
         ax = np.ones((N - m + 1, m))
         for i in range(N-m+1):
-            
+
             for j in range(m):
                 ax[:,j] = x[i,j]
 
@@ -602,6 +688,58 @@ def EN_ApEn(y,mnom = 1,rth = .2):
         phi[k] = np.mean(np.log(C))
     return phi[0] - phi[1]
 
+import matplotlib.pyplot as plt
+def SC_HurstExp(x):
+
+    N = len(x)
+
+    splits = int(np.log2(N))
+
+    rescaledRanges = []
+
+    n = []
+
+    for i in range(splits):
+
+        chunks = 2**(i)
+
+        n.append(int(N / chunks))
+
+        print(n[i])
+
+        y = x[:N - N % chunks]
+
+        y = y.reshape((chunks,int(N/chunks)))
+
+        m = y.mean(axis = 1,keepdims = True)
+
+        y = y - m
+
+        z = np.cumsum(y,1)
+
+        R = np.max(z,1) - np.min(z,1)
+
+        S = np.std(y,1)
+
+        S[S == 0] = 1
+
+
+        rescaledRanges.append(np.mean(R/S))
+
+    logRS = np.log(rescaledRanges)
+    logn = np.log(n)
+
+    plt.plot(logn,logRS)
+    plt.show()
+
+    p = np.polyfit(logn,logRS,1)
+
+    return p[0]
+
+def DN_ObsCount(y):
+    return np.count_nonzero(~np.isnan(y))
+
+#@numba.jit(nopython=True,parallel=True)
 def EN_ShannonEn(y):
     p = np.zeros(len(np.unique(y)))
     n = 0
@@ -686,30 +824,23 @@ def dfa(x, scale_lim=[5,9], scale_dens=0.25, show=False):
     fluct = np.zeros(len(scales))
     # computing RMS for each window
     for e, sc in enumerate(scales):
+        if len(calc_rms(y, sc)**2) == 0:
+            continue
         fluct[e] = np.sqrt(np.mean(calc_rms(y, sc)**2))
+
     # fitting a line to rms data
     coeff = np.polyfit(np.log2(scales), np.log2(fluct), 1)
-    if show:
-        fluctfit = 2**np.polyval(coeff,np.log2(scales))
-        plt.loglog(scales, fluct, 'bo')
-        plt.loglog(scales, fluctfit, 'r', label=r'$\alpha$ = %0.2f'%coeff[0])
-        plt.title('DFA')
-        plt.xlabel(r'$\log_{10}$(time window)')
-        plt.ylabel(r'$\log_{10}$<F(t)>')
-        plt.legend()
-        plt.show()
+    # if show:
+    #     fluctfit = 2**np.polyval(coeff,np.log2(scales))
+    #     plt.loglog(scales, fluct, 'bo')
+    #     plt.loglog(scales, fluctfit, 'r', label=r'$\alpha$ = %0.2f'%coeff[0])
+    #     plt.title('DFA')
+    #     plt.xlabel(r'$\log_{10}$(time window)')
+    #     plt.ylabel(r'$\log_{10}$<F(t)>')
+    #     plt.legend()
+    #     plt.show()
     #return scales, fluct, coeff[0]
     return coeff[0]
-
-if __name__=='__main__':
-    n = 1000
-    x = np.random.randn(n)
-    # computing DFA of signal envelope
-    x = np.abs(ss.hilbert(x))
-    scales, fluct, alpha = dfa(x, show=1)
-    print(scales)
-    print(fluct)
-    print("DFA exponent: {}".format(alpha))
 
 def CO_tc3(y,tau = 'ac'):
     if tau == 'ac':
@@ -730,9 +861,10 @@ def DN_nlogL_norm(y):
     L = -.5*np.power(z,2) - np.log(np.sqrt(2*math.pi)*sigmahat)
     return -sum(L) / len(y) 
 
-def CO_AutoCorr(y,lag = 1,method = 'TimeDomianStat'):
-    if not isinstance(y,np.ndarray):
-        y = np.asarray(y)
+
+def CO_AutoCorr(y,lag = 1,method = 'TimeDomianStat',t=1):
+    # if not isinstance(y,np.ndarray):
+    #     y = np.asarray(y)
     if method == 'TimeDomianStat':
         if lag == []:
             acf = [1]
@@ -742,10 +874,16 @@ def CO_AutoCorr(y,lag = 1,method = 'TimeDomianStat'):
         return(np.corrcoef(y[:-lag],y[lag:])[0,1])
     else:
         N = len(y)
-        nFFT = 2**(math.ceil(math.log2(N)) + 1)
+        nFFT = int(2**(np.ceil(np.log2(N)) + 1))
         F = np.fft.fft(y - y.mean(),nFFT)
         F = np.multiply(F,np.conj(F))
         acf = np.fft.ifft(F)
+        if acf[0] == 0:
+            if lag == []:
+                return acf
+            return acf[lag]
+
+
         acf = acf / acf[0]
         acf = acf.real
         if lag == []:
@@ -758,7 +896,6 @@ def CO_f1ecac(y):
     thresh = 1 / math.exp(1)
     for i in range(1,N):
         auto = CO_AutoCorr(y,i)
-        print(auto)
         if ( auto - thresh ) < 0:
             return i
     return N
@@ -774,10 +911,11 @@ def DN_ProportionValues(x,propWhat = 'positive'):
     else:
         raise Exception('Only negative, positve, zeros accepted for propWhat.')
 
+@numba.jit(nopython=True,parallel=True)
 def DN_STD(y):
     #y must be numpy array
-    if not isinstance(y,np.ndarray):
-        y = np.asarray(y)
+    # if not isinstance(y,np.ndarray):
+    #     y = np.asarray(y)
     return(np.std(y))
 
 def CO_trev(y,tau = 'ac'):
@@ -794,11 +932,13 @@ def CO_trev(y,tau = 'ac'):
         return raw
 
 import warnings
+@numba.jit(nopython=True,parallel=True)
 def DN_cv(x,k = 1):
-    if k % 1 != 0 or k < 0:
-        warnings.warn("k should probably be positive int")
+    # if k % 1 != 0 or k < 0:
+    #     warnings.warn("k should probably be positive int")
     return (np.std(x)**k) / (np.mean(x)**k)
 
+#@numba.jit(nopython=True,parallel=True)
 def DN_TrimmedMean(y,n = 0):
     N = len(y)
     trim = int(np.round(N * n / 2))
@@ -806,6 +946,58 @@ def DN_TrimmedMean(y,n = 0):
     #return stats.trim_mean(y,n) doesn't agree with matlab
     return np.mean(y[trim:N-trim])
 
+def SC_DFA(y):
+
+    N = len(y)
+
+    tau = int(np.floor(N/2))
+
+    y = y - np.mean(y)
+
+    x = np.cumsum(y)
+
+    taus = np.arange(5,tau+1)
+
+    ntau = len(taus)
+
+    F = np.zeros(ntau)
+
+    for i in range(ntau):
+
+        t = int(taus[i])
+
+
+
+        x_buff = x[:N - N % t]
+
+        x_buff = x_buff.reshape((int(N / t),t))
+
+
+        y_buff = np.zeros((int(N / t),t))
+
+        for j in range(int(N / t)):
+
+            tt = range(0,int(t))
+
+            p = np.polyfit(tt,x_buff[j,:],1)
+
+            y_buff[j,:] =  np.power(x_buff[j,:] - np.polyval(p,tt),2)
+
+
+
+        y_buff.reshape((N - N % t,1))
+
+        F[i] = np.sqrt(np.mean(y_buff))
+
+    logtaur = np.log(taus)
+
+    logF = np.log(F)
+
+    p = np.polyfit(logtaur,logF,1)
+
+    return p[0]
+
+@numba.jit(nopython=True,parallel=True)
 def DN_HighLowMu(y):
     mu = np.mean(y)
     mhi = np.mean(y[y>mu])

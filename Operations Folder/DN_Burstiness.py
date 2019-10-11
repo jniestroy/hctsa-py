@@ -1,3 +1,4 @@
+@numba.jit(nopython=True,parallel=True)
 def DN_Burstiness(y):
     r = np.std(y) / y.mean()
     B = ( r - 1 ) / ( r + 1 )

@@ -14,7 +14,7 @@ from Operations import *
 from Periphery import *
 
 functions = [CO_AutoCorr,CO_f1ecac,CO_FirstMin,CO_FirstZero]
-functions = [SY_Trend]
+functions = [DN_ObsCount]
 mat = scipy.io.loadmat('/Users/justinniestroy-admin/Documents/Work/Randall Data/houlter data/RR/UVA0013_rr.mat',squeeze_me=True)
 all = []
 rr = np.asarray(mat['rr'])
@@ -24,11 +24,15 @@ m = []
 y = np.ones(5000)
 y = np.asarray([4,7,9,10,6,11,3])
 #x  = 100 * np.sin(5 * y) + 25 + np.random.normal(0,5,5000)
-for func in functions:
+start_time = time.time()
+#for func in functions:
     #m.append(CO_AutoCorr(rr,i,'test'))
-    m.append(func(rr))
-
+for i in range(1):
+    m.append(SC_HurstExp(rr[:2000]))
 print(m)
+print("--- %s seconds ---" % (time.time() - start_time))
+
+
 # functions = [
 # for i in range(1,2800):
 #     id = str(i).zfill(4)

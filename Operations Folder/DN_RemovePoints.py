@@ -17,7 +17,7 @@ def DN_RemovePoints(y,removeHow = 'absfar',p = .99):
     y_trim = y[rKeep]
 
     #print(rKeep)
-    print(y_trim)
+
 
     acf_y = SUB_acf(y,8)
     acf_y_trim = SUB_acf(y_trim,8)
@@ -44,7 +44,8 @@ def DN_RemovePoints(y,removeHow = 'absfar',p = .99):
 
     out['std'] = np.std(y_trim)
 
-    out['skewnessrat'] = stats.skew(y_trim)/stats.skew(y)
+    if stats.skew(y) != 0:
+        out['skewnessrat'] = stats.skew(y_trim)/stats.skew(y)
 
     out['kurtosisrat'] = stats.kurtosis(y_trim)/stats.kurtosis(y)
 

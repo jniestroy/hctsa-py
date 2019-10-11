@@ -1,4 +1,4 @@
-def DN_CompareKSFit(x,whatDist):
+def DN_CompareKSFit(x,whatDist = 'norm'):
     xStep = np.std(x) / 100
     if whatDist == 'norm':
         a, b = stats.norm.fit(x)

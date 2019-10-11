@@ -1,3 +1,4 @@
+#@numba.jit(nopython=True,parallel=True)
 def EN_ApEn(y,mnom = 1,rth = .2):
 
     r = rth * np.std(y)
@@ -6,6 +7,7 @@ def EN_ApEn(y,mnom = 1,rth = .2):
 
     for k in range(2):
         m = mnom + k
+        m = int(m)
         C = np.zeros(N-m+1)
 
         x = np.zeros((N - m + 1, m))
@@ -15,7 +17,7 @@ def EN_ApEn(y,mnom = 1,rth = .2):
 
         ax = np.ones((N - m + 1, m))
         for i in range(N-m+1):
-            
+
             for j in range(m):
                 ax[:,j] = x[i,j]
 

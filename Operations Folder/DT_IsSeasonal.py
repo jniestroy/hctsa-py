@@ -6,11 +6,14 @@ def DT_IsSeasonal(y):
     th_fit = 0.3
     th_ampl = 0.5
 
-    params, params_covariance = optimize.curve_fit(test_func, np.arange(N), y, p0=[10, 13,600,0])
+    try:
+        params, params_covariance = optimize.curve_fit(test_func, np.arange(N), y, p0=[10, 13,600,0])
+    except:
+        return False
 
     a,b,c,d = params
 
-    print(params)
+
 
     y_pred = a * np.sin(b * np.arange(N) + d) + c
 
@@ -18,9 +21,9 @@ def DT_IsSeasonal(y):
     SSr = sum(np.power(y - y_pred,2))
 
     R = 1 - SSr / SST
-    print(R)
 
-    if R > th_fit and (np.absolute(a) > th_ampl*.1*np.std(y)):
+
+    if R > th_fit: #and (np.absolute(a) > th_ampl*.1*np.std(y)):
         return True
     else:
         return False

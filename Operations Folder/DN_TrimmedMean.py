@@ -1,3 +1,4 @@
+#@numba.jit(nopython=True,parallel=True)
 def DN_TrimmedMean(y,n = 0):
     N = len(y)
     trim = int(np.round(N * n / 2))
