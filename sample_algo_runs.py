@@ -51,25 +51,27 @@ interval_length = 60*10
 step_size = 60*5
 result = run.run_all(time_series,time)
 for series in result:
-    result[series].to_csv('/Users/justinniestroy-admin/Desktop/UVA_' + str(id) + '_' + series + '_all.csv',index = False)
+    test = result[series].head()
+    test.to_csv('/Users/justinniestroy-admin/Desktop/UVA_' + str(id) + '_' + series + '_all.csv',index = False)
+    #result[series].to_csv('/Users/justinniestroy-admin/Desktop/UVA_' + str(id) + '_' + series + '_all.csv',index = False)
 print('Finished Houlter Example')
 ############################
 #
 # Below is NICU Example
 #
 ##############################
-filepath = '/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_vitals.mat'
-df,time = read_in_NICU_file(filepath)
-time = time.to_numpy()
-num_cols = df.shape[1]
-time_series = {}
-for i in range(num_cols):
-    time_series[list(df.columns.values)[i]] = df[list(df.columns.values)[i]].to_numpy()
-interval_length = 60*10
-step_size = 60*5
-result = run.run_all(time_series,time)
-for series in result:
-    result[series].to_csv('/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_' + series + '_all.csv',index = False)
+# filepath = '/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_vitals.mat'
+# df,time = read_in_NICU_file(filepath)
+# time = time.to_numpy()
+# num_cols = df.shape[1]
+# time_series = {}
+# for i in range(num_cols):
+#     time_series[list(df.columns.values)[i]] = df[list(df.columns.values)[i]].to_numpy()
+# interval_length = 60*10
+# step_size = 60*5
+# result = run.run_all(time_series,time)
+# for series in result:
+#     result[series].to_csv('/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_' + series + '_all.csv',index = False)
 # end_times = np.arange(np.min(time) + interval_length,np.max(time),step_size)
 # for t in end_times:
 #     test = run.get_interval(interval_length,end_times[1],time)

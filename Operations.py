@@ -705,7 +705,6 @@ def SC_HurstExp(x):
 
         n.append(int(N / chunks))
 
-        print(n[i])
 
         y = x[:N - N % chunks]
 
@@ -729,8 +728,8 @@ def SC_HurstExp(x):
     logRS = np.log(rescaledRanges)
     logn = np.log(n)
 
-    plt.plot(logn,logRS)
-    plt.show()
+    # plt.plot(logn,logRS)
+    # plt.show()
 
     p = np.polyfit(logn,logRS,1)
 

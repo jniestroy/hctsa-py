@@ -249,7 +249,7 @@ def get_interval(interval_length,end_time,times):
     # end_time is in seconds
     return np.where((times <= end_time) & (times > end_time - interval_length))
 
-def all(t,hr = hr,time = time,interval_length = 60*10):
+def all(t,hr,time,interval_length = 60*10):
     indx = get_interval(interval_length,int(t),time)
     results = run_algos(hr[indx])
     results['time'] = t
@@ -293,7 +293,7 @@ def run_all(time_series,time,interval_length = 60*10,step_size=60*5):
         time_series = {'y':time_series}
     full_results = {}
     for key, data in time_series.items():
-        print("Starting to Analyze " + key)
+        print("Analyzing " + key)
         pool = mp.Pool(mp.cpu_count())
         #results = [pool.apply(all, args=(hr,time,interval_length,t)) for t in end_times]
         results = pool.map(partial(all_times,series = data,time = time), [t for t in end_times])
