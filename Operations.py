@@ -309,8 +309,8 @@ import numba
 def EN_SampEn(y,M = 2,r = 0,pre = ''):
     if r == 0:
         r = .1*np.std(y)
-    # else:
-    #     r = r*np.std(y)
+    else:
+        r = r*np.std(y)
     M = M + 1
     N = len(y)
     lastrun = np.zeros(N)

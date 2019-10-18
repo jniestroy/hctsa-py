@@ -207,17 +207,18 @@ def run_algos(y,algos = 'all',last_non_nan = np.nan,t=1):
     results = {}
 
     if algos == 'all':
-        algos = operations
+        algos = ['EN_PermEm', 'DN_Moments', 'DN_Withinp', 'DN_Quantile', 'DN_RemovePoints', 'DN_OutlierInclude', 'DN_Burstiness', 'DN_pleft', 'CO_FirstZero', 'DN_Fit_mle', 'CO_FirstMin', 'DN_IQR', 'DN_CompareKSFit', 'DN_Mode', 'EN_SampEn', 'SY_Trend', 'DN_Mean', 'CO_glscf', 'DN_Cumulants', 'DN_Range', 'DN_FitKernalSmooth', 'DN_Median', 'DN_Spread', 'DN_MinMax', 'DN_CustomSkewness', 'EN_mse', 'IN_AutoMutualInfo', 'EN_CID', 'DN_Unique', 'DT_IsSeasonal', 'EN_ApEn', 'SC_HurstExp', 'DN_ObsCount',  'EN_ShannonEn', 'dfa', 'CO_tc3', 'DN_nlogL_norm', 'CO_AutoCorr', 'CO_f1ecac', 'DN_ProportionValues', 'DN_STD', 'CO_trev', 'DN_cv', 'DN_TrimmedMean', 'SC_DFA', 'DN_HighLowMu']
 
     #Make sure time series isn't empty
     if 'DN_ObsCount' in algos:
         results['Observations'] = DN_ObsCount(y)
         if results['Observations'] == 0:
             return results
-
+    if len(algos)>1:
     #Compute all histogram stats on non-imputed data
-    results = run_histogram_algos(y,algos,results)
-
+        results = run_histogram_algos(y,algos,results)
+    else:
+        return results
     #if y is only 1 value don't calc time depedent stuff
     if results['std'] == 0.0:
 
@@ -225,6 +226,7 @@ def run_algos(y,algos = 'all',last_non_nan = np.nan,t=1):
 
     #impute data for algos that can't run with nans
     y = impute(y,last_non_nan)
+
 
     results = time_series_dependent_algos(y,algos,results,t)
 
@@ -258,7 +260,9 @@ def all(t,hr,time,interval_length = 60*10):
 def all_times(t,series,time,interval_length = 600):
     indx = get_interval(interval_length,int(t),time)
     indx = indx[0]
-    if series[np.min(indx)] == np.nan:
+    if len(indx) <= 1:
+        return {'time':t}
+    if np.isnan(series[np.min(indx)]):
         nonnan = np.argwhere(~np.isnan(series))[np.argwhere(~np.isnan(series)) < np.min(indx)]
         if len(nonnan) != 0:
             last_non_nan_indx = np.max(nonnan)
@@ -267,8 +271,9 @@ def all_times(t,series,time,interval_length = 600):
             lastvalue = np.nan
 
         results = run_algos(series[indx],'all',lastvalue,t)
+        #results = run_algos(series[indx],['DN_ObsCount'],lastvalue,t)
     else:
-
+        #results = run_algos(series[indx],['DN_ObsCount'],1,t)
         results = run_algos(series[indx],'all',1,t)
     results['time'] = t
     return results
@@ -289,6 +294,7 @@ def nanfill(y):
 
 def run_all(time_series,time,interval_length = 60*10,step_size=60*5):
     end_times = np.arange(np.min(time) + interval_length,np.max(time),step_size)
+    #print(end_times)
     if not isinstance(time_series,dict):
         time_series = {'y':time_series}
     full_results = {}
@@ -311,43 +317,3 @@ def run_all(time_series,time,interval_length = 60*10,step_size=60*5):
         full_results[key] = df
         #break
     return full_results
-
-
-
-
-# algos = 'all'
-# interval_length = 60*10
-# step_size = 60*5
-# for i in range(211,212):
-#     print(i)
-#     time, hr = read_in_data(i)
-#     id = str(i).zfill(4)
-#     end_times = np.arange(np.min(time) + interval_length,np.max(time),step_size)
-#
-#
-#
-#     pool = mp.Pool(mp.cpu_count())
-#     #results = [pool.apply(all, args=(hr,time,interval_length,t)) for t in end_times]
-#     results = pool.map(all, [t for t in end_times])
-#
-#     pool.close()
-#     first = True
-#     for result in results:
-#         if first:
-#
-#             df = pd.DataFrame(result,index = [0])[:1]
-#             first  = False
-#             continue
-#         df = df.append(results, ignore_index=True)
-#     df.to_csv('/Users/justinniestroy-admin/Documents/Work/Randall Data/houlter data/hctsa results/UVA' + id +'_hist_test2.csv',index = False)
-# # # for t in end_times:
-#     print(t)
-#     indx = get_interval(interval_length,int(t),time)
-#     results = run_algos(hr[indx])
-#     results['time'] = t
-#     if first:
-#         df = pd.DataFrame(results,index = [0])[:1]
-#         first = False
-#         continue
-#     df = df.append(results, ignore_index=True)
-#     df.to_csv('test.csv',index = False)
