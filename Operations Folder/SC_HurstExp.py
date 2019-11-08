@@ -1,4 +1,4 @@
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 def SC_HurstExp(x):
 
     N = len(x)

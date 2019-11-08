@@ -1,49 +1,3 @@
-import itertools
-import numba
-
-@numba.jit(nopython=True,parallel=True)
-def EN_PermEn(y,m = 2,tau = 1):
-
-    x = BF_embed(y,tau,m)
-
-
-    Nx = x.shape[0]
-
-    permList = perms(m)
-    numPerms = len(permList)
-
-    countPerms = np.zeros(numPerms)
-
-
-    for j in range(Nx):
-        ix = np.argsort(x[j,:])
-
-        for k in range(numPerms):
-            if not (permList[k,:] - ix).all() :
-                countPerms[k] = countPerms[k] + 1
-                break
-
-    p = countPerms / Nx
-    p_0 = p[p > 0]
-    permEn = -sum(np.multiply(p_0,np.log2(p_0)))
-
-
-
-    mFact = math.factorial(m)
-    normPermEn = permEn / np.log2(mFact)
-
-    out = {'permEn':permEn,'normPermEn':normPermEn}
-
-    return out
-
-def perms(n):
-    permut = itertools.permutations(np.arange(n))
-    permut_array = np.empty((0,n))
-    for p in permut:
-        permut_array = np.append(permut_array,np.atleast_2d(p),axis=0)
-
-    return(permut_array)
-
 def DN_Moments(y,theMom = 1):
     if np.std(y) != 0:
         return stats.moment(y,theMom) / np.std(y)
@@ -134,7 +88,7 @@ def DN_OutlierInclude(y,thresholdHow='abs',inc=.01):
     if not BF_iszscored(y):
         muhat, sigmahat = stats.norm.fit(y)
         y = (y - muhat) / sigmahat
-        warnings.warn('DN_OutlierInclude y should be z scored. So just converted y to z-scores')
+        #warnings.warn('DN_OutlierInclude y should be z scored. So just converted y to z-scores')
     N = len(y)
     if thresholdHow == 'abs':
         thr = np.arange(0,np.max(np.absolute(y)),inc)
@@ -167,8 +121,10 @@ def DN_OutlierInclude(y,thresholdHow='abs',inc=.01):
 
         return msDt
 
-@numba.jit(nopython=True,parallel=True)
+#@numba.jit(nopython=True,parallel=True)
 def DN_Burstiness(y):
+    if y.mean() == 0:
+        return np.nan
     r = np.std(y) / y.mean()
     B = ( r - 1 ) / ( r + 1 )
     return(B)
@@ -212,6 +168,175 @@ def CO_FirstMin(y, minWhat = 'ac'):
         elif (i > 2) and (acf[i-2] > acf[i-1]) and (acf[i-1] < acf[i]):
             return i-1
     return N
+
+
+import numpy as np
+import scipy as sc
+from scipy import stats
+import math
+import scipy.io # only needed if you uncomment testing code to compare with matlab (circumvents differences in random permutation between python and MATLAB)
+
+# HELPER FILES REQUIRED
+import Periphery
+
+
+
+def FC_Suprise( y, whatPrior='dist', memory=0.2, numGroups=3, coarseGrainMethod='quantile', numIters=500, randomSeed='default'):
+    '''
+    How surprised you would be of the next data point given recent memory.
+
+    Coarse-grains the time series, turning it into a sequence of symbols of a
+    given alphabet size, numGroups, and quantifies measures of surprise of a
+    process with local memory of the past memory values of the symbolic string.
+
+    We then consider a memory length, memory, of the time series, and
+    use the data in the proceeding memory samples to inform our expectations of
+    the following sample.
+
+    The 'information gained', log(1/p), at each sample using expectations
+    calculated from the previous memory samples, is estimated.
+
+
+    :param y: the input time series
+    :param whatPrior: the type of information to store in memory
+            (i) 'dist' : the values of the time series in the previous memory
+            (ii) 'T1' : the one-point transition probabiltiites in the pervious memory samples
+            (iii) 'T2' : the two point transition probabilties in the memory samples
+
+    :param memory: the memory length (either number of samples, or a proportion of the time-series length, if between 0 and 1
+    :param numGroups: the number of groups to coarse-grain the time series into
+    :param coarseGrainMethod: the coarse-graining, or symbolization method
+            (i) 'quantile' : an equiprobable alphabet by the value of each time series datapoint
+            (ii) 'updown' : an equiprobable alphabet by the value of incremental changes in the time-series values
+            (iii) 'embed2quadrants' : 4-letter alphabet of the quadrant each data point resides in a two-dimensional embedding space
+
+    :param numIters: the number of interations to repeat the procedure for
+    :param randomSeed: whether (and how) to reset the random seed, using BF_ResetSeed
+    :return: a dictionary containing summaries of this series of information gains, including: minimum, maximum, mean, median, lower and upper quartiles, and standard deviation
+    '''
+
+    # ------------------------------------------------------------------------------------------------------------------------------------------------------
+    # Check inputs and set defaults -- most defaults were set in the function declaration above
+    #------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    if (memory > 0) and (memory < 1): #specify memory as a proportion of the time series length
+        memory = int(np.round(memory*len(y)))
+
+    # ----------------------------------------------------------------------------------------------------------------------------------------------------
+    # COURSE GRAIN
+    # requires SB_CoarseGrain.py helper function
+    #------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    yth = SB_CoarseGrain(y, coarseGrainMethod, numGroups) # a coarse-grained time series using the numbers 1:numgroups
+
+    N = int(len(yth))
+
+    #select random samples to test
+    BF_ResetSeed(randomSeed) #in matlab randomSeed defaults to an empty array [] and is then converted to 'default', here it defaults to 'default'
+    rs = np.random.permutation(int(N-memory)) + memory # can't do beginning of time series, up to memory
+    rs = np.sort(rs[0:min(numIters,(len(rs)-1))])
+    rs = np.array([rs]) # made into two dimensional array to match matlab and work with testing code directly below
+
+
+    # UNCOMMENT CODE BELOW TO COMPARE TO MATLAB USING rr data, make sure 'rs_var.mat' is in same folder as test file ( it's the resulting matlab rs value when using the UVA0001_rr.mat)
+    # data = scipy.io.loadmat('rs_var.mat', squeeze_me = False)
+    # rs = np.asarray(data['rs'])
+    # print("rs MATLAB: ", rs)
+
+    # -------------------------------------------------------------------------------------------------------------------
+    # COMPUTE EMPIRICAL PROBABILITIES FROM TIME SERIES
+    #-------------------------------------------------------------------------------------------------------------------
+
+    store = np.zeros([numIters, 1])
+
+    for i in range(0, rs.size): # rs.size
+        if whatPrior == 'dist':
+            # uses the distribution up to memory to inform the next point
+
+            p = np.sum(yth[np.arange(rs[0, i]-memory-1, rs[0, i]-1)] == yth[rs[0, i]-1])/memory # had to be careful with indexing, arange() works like matlab's : operator
+            store[i] = p
+
+
+        elif whatPrior == 'T1':
+            # uses one-point correlations in memory to inform the next point
+
+            # estimate transition probabilites from data in memory
+            # find where in memory this has been observbed before, and preceded it
+
+            memoryData = yth[rs[0, i] - memory - 1:rs[0, i]-1] # every outputted value should be one less than in matlab
+
+            # previous data observed in memory here
+            inmem = np.nonzero(memoryData[0:memoryData.size - 1] == yth[rs[0, i]-2])
+            inmem = inmem[0] # nonzero outputs a tuple of two arrays for some reason, the second one of all zeros
+
+
+            if inmem.size == 0:
+                p = 0
+            else:
+                p = np.mean(memoryData[inmem + 1] == yth[rs[0, i]-1])
+
+            store[i] = p
+
+        elif whatPrior == 'T2':
+
+            # uses two point correlations in memory to inform the next point
+
+            memoryData = yth[rs[0, i] - memory - 1:rs[0, i]-1] # every outputted value should be one less than in matlab
+
+            inmem1 = np.nonzero(memoryData[1:memoryData.size - 1] == yth[rs[0, i]-2])
+            inmem1 = inmem1[0]
+
+            inmem2 = np.nonzero(memoryData[inmem1] == yth[rs[0, i]-3])
+            inmem2 = inmem2[0]
+
+
+            if inmem2.size == 0:
+                p = 0
+            else:
+                p = np.sum(memoryData[inmem2+2] == yth[rs[0, i]-1])/len(inmem2)
+
+            store[i] = p
+
+        else:
+            print("Error: unknown method: " + whatPrior)
+            return
+
+    # ------------------------------------------------------------------------------------------------------------------------------------------
+    # INFORMATION GAINED FROM NEXT OBSERVATION IS log(1/p) = -log(p)
+    #-------------------------------------------------------------------------------------------------------------------------------------------
+
+    store[store == 0] = 1 # so that we set log[0] == 0
+
+    out = {} # dictionary for outputs
+
+    for i in range(0, len(store)):
+        if store[i] == 0:
+            store[i] = 1
+
+    store = -(np.log(store))
+
+    #minimum amount of information you can gain in this way
+    if np.any(store > 0):
+        out['min'] = min(store[store > 0]) # find the minimum value in the array, excluding zero
+    else:
+        out['min'] = np.nan
+
+    out['max'] = np.max(store) # maximum amount of information you cna gain in this way
+    out['mean'] = np.mean(store)
+    out['sum'] = np.sum(store)
+    out['median'] = np.median(store)
+    lq = sc.stats.mstats.mquantiles(store, 0.25, alphap=0.5, betap=0.5) # outputs an array of size one
+    out['lq'] = lq[0] #convert array to int
+    uq = sc.stats.mstats.mquantiles(store, 0.75, alphap=0.5, betap=0.5)
+    out['uq'] = uq[0]
+    out['std'] = np.std(store)
+
+    if out['std'] == 0:
+        out['tstat'] = np.nan
+    else:
+        out['tstat'] = abs((out['mean']-1)/(out['std']/math.sqrt(numIters)))
+
+    return out # returns a dict with all of the output instead of a struct like in matlab, python doesnt have structs
 
 def DN_IQR(y):
     return stats.iqr(y)
@@ -303,64 +428,84 @@ def DN_Mode(y):
     return float(stats.mode(y).mode)
 
 import numpy as np
-import numba
+import warnings
+#import numba
 
-@numba.jit(nopython=True,parallel=True)
-def EN_SampEn(y,M = 2,r = 0,pre = ''):
-    if r == 0:
-        r = .1*np.std(y)
-    else:
-        r = r*np.std(y)
-    M = M + 1
-    N = len(y)
-    lastrun = np.zeros(N)
-    run = np.zeros(N)
-    A = np.zeros(M)
-    B = np.zeros(M)
-    p = np.zeros(M)
-    e = np.zeros(M)
-
-    for i in range(1,N):
-        y1 = y[i-1]
-
-        for jj in range(1,N-i + 1):
-
-            j = i + jj - 1
-
-            if np.absolute(y[j] - y1) < r:
-
-                run[jj] = lastrun[jj] + 1
-                M1 = min(M,run[jj])
-                for m in range(int(M1)):
-                    A[m] = A[m] + 1
-                    if j < N:
-                        B[m] = B[m] + 1
-            else:
-                run[jj] = 0
-        for j in range(N-1):
-            lastrun[j] = run[j]
-
-    NN = N * (N - 1) / 2
-    p[0] = A[0] / NN
-    e[0] = - np.log(p[0])
-    for m in range(1,int(M)):
-        p[m] = A[m] / B[m-1]
-        e[m] = -np.log(p[m])
-    i = 0
-    out = {'sampen':np.zeros(len(e)),'quadSampEn':np.zeros(len(e))}
-    for ent in e:
-        quaden1 = ent + np.log(2*r)
-        out['sampen'][i] = ent
-        out['quadSampEn'][i] = quaden1
-        i = i + 1
-
-    return out
+#@numba.jit(nopython=True,parallel=True)
+def EN_SampEn(x,m=2,r=.2,scale=True):
+    warnings.filterwarnings('ignore')
+    if scale:
+        r = np.std(x) * r
+    templates = make_templates(x,m)
+    A = 0
+    B = 0
+    for i in range(templates.shape[0]):
+        template = templates[i,:]
+        A = A + np.sum(np.amax(np.abs(templates-template), axis=1) < r) -1
+        B = B + np.sum(np.amax(np.absolute(templates[:,0:m]-template[0:m]),axis=1) < r) - 1
+    if B == 0:
+        return {'Sample Entropy':np.nan,"Quadratic Entropy":np.nan}
+    return {'Sample Entropy':- np.log(A/B),"Quadratic Entropy": - np.log(A/B) + np.log(2*r)}
+#@numba.jit(nopython=True,parallel=True)
+def make_templates(x,m):
+    N = int(len(x) - (m))
+    templates = np.zeros((N,m+1))
+    for i in range(N):
+        templates[i,:] = x[i:i+m+1]
+    return templates
+# def EN_SampEn(y,M = 2,r = 0,pre = ''):
+#     if r == 0:
+#         r = .1*np.std(y)
+#     else:
+#         r = r*np.std(y)
+#     M = M + 1
+#     N = len(y)
+#     lastrun = np.zeros(N)
+#     run = np.zeros(N)
+#     A = np.zeros(M)
+#     B = np.zeros(M)
+#     p = np.zeros(M)
+#     e = np.zeros(M)
+#
+#     for i in range(1,N):
+#         y1 = y[i-1]
+#
+#         for jj in range(1,N-i + 1):
+#
+#             j = i + jj - 1
+#
+#             if np.absolute(y[j] - y1) < r:
+#
+#                 run[jj] = lastrun[jj] + 1
+#                 M1 = min(M,run[jj])
+#                 for m in range(int(M1)):
+#                     A[m] = A[m] + 1
+#                     if j < N:
+#                         B[m] = B[m] + 1
+#             else:
+#                 run[jj] = 0
+#         for j in range(N-1):
+#             lastrun[j] = run[j]
+#
+#     NN = N * (N - 1) / 2
+#     p[0] = A[0] / NN
+#     e[0] = - np.log(p[0])
+#     for m in range(1,int(M)):
+#         p[m] = A[m] / B[m-1]
+#         e[m] = -np.log(p[m])
+#     i = 0
+#     out = {'sampen':np.zeros(len(e)),'quadSampEn':np.zeros(len(e))}
+#     for ent in e:
+#         quaden1 = ent + np.log(2*r)
+#         out['sampen'][i] = ent
+#         out['quadSampEn'][i] = quaden1
+#         i = i + 1
+#
+#     return out
 
 from scipy import signal
 def SY_Trend(y):
-    if not BF_iszscored(y):
-        warnings.warn('y should be zero scored. ')
-        #y = (y - np.mean(y)) / np.std(y)
+
     N  = len(y)
     stdRatio = np.std(signal.detrend(y)) / np.std(y)
 
@@ -388,9 +533,9 @@ def LinearFit(xData,yData):
     return m,b
 
 import numpy as np
-import numba
 
-@numba.jit(nopython=True,parallel=True)
+
+#@numba.jit(nopython=True,parallel=True)
 def DN_Mean(y):
     #y must be numpy array
     # if not isinstance(y,np.ndarray):
@@ -486,7 +631,7 @@ def DN_FitKernalSmooth(x,varargin = {}):
     return out
 
 import numpy as np
-@numba.jit(nopython=True)
+#@numba.jit(nopython=True)
 def DN_Median(y):
     #y must be numpy array
     # if not isinstance(y,np.ndarray):
@@ -511,7 +656,7 @@ def mad(data, axis=None):
 def mead(data, axis=None):
     return np.median(np.absolute(data - np.median(data, axis)), axis)
 
-@numba.jit(nopython=True,parallel=True)
+#@numba.jit(nopython=True,parallel=True)
 def DN_MinMax(y,which = 'max'):
     # if not isinstance(y,np.ndarray):
     #     y = np.asarray(y)
@@ -520,7 +665,49 @@ def DN_MinMax(y,which = 'max'):
     else:
         return(y.max())
 
-@numba.jit(nopython=True,parallel=True)
+
+
+
+def CO_RM_AMInformation(*args):
+    """
+    A wrapper for rm_information(), which calculates automutal information
+
+    Inputs:
+        y, the input time series
+        tau, the time lag at which to calculate automutal information
+
+    :returns estimate of mutual information
+
+    - Wrapper initially developed by Ben D. Fulcher in MATLAB
+    - rm_information.py initially developed by Rudy Moddemeijer in MATLAB
+    - Translated to python by Tucker Cullen
+
+    """
+    nargin = len(args)
+
+    y = args[0]
+
+    # if np.std(y) == 0:
+    #     return np.nan
+
+    if nargin == 2:
+        tau = args[1]
+    else:
+        tau = 1  # default is to calculate the automutal info at lag 1
+
+    if tau >= len(y):
+        print("Time series two short for given time lag ", tau)
+        return
+
+    y1 = y[0: len(y) - tau]
+    y2 = y[tau: len(y)]
+
+
+    out = rm_information(y1, y2)  # returns a tuple that includes all the outputs of rm_information.py
+
+    return out[0]
+
+#@numba.jit(nopython=True,parallel=True)
 def DN_CustomSkewness(y,whatSkew = 'pearson'):
     if whatSkew == 'pearson':
         if np.std(y) != 0:
@@ -537,7 +724,7 @@ def DN_CustomSkewness(y,whatSkew = 'pearson'):
     else:
          raise Exception('whatSkew must be either pearson or bowley.')
 
-def EN_mse(y,scale=range(1,11),m=2,r=.15,adjust_r=True):
+def EN_mse(y,scale=range(2,11),m=2,r=.15,adjust_r=True):
 
     minTSLength = 20
     numscales = len(scale)
@@ -552,13 +739,17 @@ def EN_mse(y,scale=range(1,11),m=2,r=.15,adjust_r=True):
 
     for si in range(numscales):
         if len(y_cg[si]) >= minTSLength:
+
             sampEnStruct = EN_SampEn(y_cg[si],m,r)
             outEns.append(sampEnStruct)
         else:
             outEns.append(np.nan)
     sampEns = []
     for out in outEns:
-        sampEns.append(out['sampen'][1])
+        if not isinstance(out,dict):
+            sampEns.append(np.nan)
+            continue
+        sampEns.append(out['Sample Entropy'])
 
     maxSampen = np.max(sampEns)
     maxIndx = np.argmax(sampEns)
@@ -572,8 +763,12 @@ def EN_mse(y,scale=range(1,11),m=2,r=.15,adjust_r=True):
 
     meanchSampen = np.mean(np.diff(sampEns))
 
-    out = {'sampEns':sampEns,'max Samp En':maxSampen,'max point':scale[maxIndx],'min Samp En':minSampen,\
+    out = {'max Samp En':maxSampen,'max point':scale[maxIndx],'min Samp En':minSampen,\
     'min point':scale[minIndx],'mean Samp En':meanSampen,'std Samp En':stdSampen, 'Mean Change':meanchSampen}
+
+    i = 1
+    for sampEn in sampEns:
+        out['sampEn ' + str(i)] = sampEn
 
     return out
 
@@ -616,7 +811,7 @@ def EN_CID(y):
     return out
 
 def f_CE1(y):
-    return np.sqrt(np.mean( 1 + np.power(np.diff(y),2) ) )
+    return np.sqrt(np.mean(np.power(np.diff(y),2) ) )
 
 def f_CE2(y):
     return np.mean(np.sqrt( 1 + np.power(np.diff(y),2) ) )
@@ -688,7 +883,7 @@ def EN_ApEn(y,mnom = 1,rth = .2):
         phi[k] = np.mean(np.log(C))
     return phi[0] - phi[1]
 
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 def SC_HurstExp(x):
 
     N = len(x)
@@ -910,12 +1105,193 @@ def DN_ProportionValues(x,propWhat = 'positive'):
     else:
         raise Exception('Only negative, positve, zeros accepted for propWhat.')
 
-@numba.jit(nopython=True,parallel=True)
+
+import numpy as np
+import scipy
+from scipy import signal
+import math
+
+def MD_hrv_classic(y):
+    """
+
+    classic heart rate variabilty statistics
+
+    Typically assumes an NN/RR time series in the units of seconds
+
+    :param y: the input time series
+
+    Includes:
+    (i) pNNx
+    cf. "The pNNx files: re-examining a widely used heart rate variability
+           measure", J.E. Mietus et al., Heart 88(4) 378 (2002)
+
+    (ii) Power spectral density ratios in different frequency ranges
+    cf. "Heart rate variability: Standards of measurement, physiological
+        interpretation, and clinical use",
+        M. Malik et al., Eur. Heart J. 17(3) 354 (1996)
+
+    (iii) Triangular histogram index, and
+
+    (iv) Poincare plot measures
+    cf. "Do existing measures of Poincare plot geometry reflect nonlinear
+       features of heart rate variability?"
+        M. Brennan, et al., IEEE T. Bio.-Med. Eng. 48(11) 1342 (2001)
+
+    Code is heavily derived from that provided by Max A. Little:
+    http://www.maxlittle.net/
+
+    """
+
+    #Standard Defaults
+    diffy = np.diff(y)
+    N = len(y)
+
+    # Calculate pNNx percentage ---------------------------------------------------------------------------------
+    Dy = np.abs(diffy) * 1000
+
+    # anonymous function to fo the PNNx calculation:
+    # proportion of the difference magnitudes greater than X*sigma
+    PNNxfn = lambda x : np.sum(Dy > x)/(N-1)
+
+    out = {} # declares a dictionary to contains the outputs, instead of MATLAB struct
+
+    out['pnn5'] = PNNxfn(5) # 0.0055*sigma
+    out['pnn10'] = PNNxfn(10)
+    out['pnn20'] = PNNxfn(20)
+    out['pnn30'] = PNNxfn(30)
+    out['pnn40'] = PNNxfn(40)
+
+    #calculate PSD, DOES NOT MATCH UP WITH MATLAB -----------------------------------------------------------------
+    F, Pxx = signal.periodogram(y, window= np.hanning(N)) #hanning confirmed to do the same thing as hann in matlab, periodogram() is what differs
+
+    # calculate spectral measures such as subband spectral power percentage, LF/HF ratio etc.
+
+
+    LF_lo = 0.04
+    LF_hi = 0.15
+    HF_lo = 0.15
+    HF_hi = 0.4
+
+    fbinsize = F[1] - F[0]
+
+    #calculating indl, indh, indv; needed for loop for python implementation
+    indl = []
+    for x in F:
+        if x >= LF_lo and x <= LF_hi:
+            indl.append(1)
+        else :
+            indl.append(0)
+
+
+    indh = []
+    for x in F:
+        if x >= HF_lo and x <= HF_hi:
+            indh.append(1)
+        else:
+            indh.append(0)
+    #print("indh: ", indh)
+
+    indv = []
+    for x in F:
+        if x <= LF_lo:
+            indv.append(1)
+        else :
+            indv.append(0)
+    #print("indv: ", indv)
+
+    #calculating lfp, hfp, and vlfp, needed for loop for python implementation
+    indlPxx = []
+    for i in range(0, len(Pxx)):
+        if indl[i] == 1:
+            indlPxx.append(Pxx[i])
+    lfp = fbinsize * np.sum(indlPxx)
+    #print()
+    #print('lfp: ', lfp)
+
+    indhPxx = []
+    for i in range(0, len(Pxx)):
+        if indh[i] == 1:
+            indhPxx.append(Pxx[i])
+    hfp = fbinsize * np.sum(indhPxx)
+    #print('hfp: ', hfp)
+
+    indvPxx = []
+    for i in range(0, len(Pxx)):
+        if indv[i] == 1:
+            indvPxx.append(Pxx[i])
+    vlfp = fbinsize * np.sum(indvPxx)
+    #print('vlfp: ', vlfp)
+
+    out['lfhf'] = lfp / hfp
+    total = fbinsize * np.sum(Pxx)
+    out['vlf'] = vlfp/total * 100
+    out['lf'] = lfp/total * 100
+    out['hf'] = hfp/total * 100
+
+
+    # triangular histogram index: ----------------------------------------------------------------------
+    numBins = 10
+    hist = np.histogram(y, bins=numBins)
+    out['tri'] = len(y)/np.max(hist[0])
+
+
+    # Poincare plot measures ---------------------------------------------------------------------------
+    rmssd = np.std(diffy, ddof=1) #set delta degrees of freedom to 1 to get same result as matlab
+    sigma = np.std(y, ddof=1)
+    
+    out["SD1"] = 1/math.sqrt(2) * rmssd * 1000
+    out["SD2"] = math.sqrt(2 * sigma**2 - (1/2) * rmssd**2) * 1000
+
+    return out
+    # Anonymous function to do the PNNx calculation
+    # proportion of the difference magnitudes greater than X*sigma
+
+#@numba.jit(nopython=True,parallel=True)
 def DN_STD(y):
     #y must be numpy array
     # if not isinstance(y,np.ndarray):
     #     y = np.asarray(y)
     return(np.std(y))
+
+
+import numpy as np
+
+def MD_pNN(x):
+    """
+    pNNx measures of heart rate variability
+
+    Applies pNNx measures to the time series assumed
+    to represent sequences of consecutive RR intervals
+    measured in milliseconds
+
+    This code is heavily derived from MD_hrv_classic.m because
+    it doesn't make medical sense to do a PNN on a z-scored time series.
+    But now PSD doesn't make too much sense, so we just evaluate the pNN
+    measures.
+
+    :param x: the input time series
+    :return: pNNx percentages in a dict
+    """
+
+    # Standard defaults --------------------------------
+    diffx = np.diff(x)
+    N = len(x)
+
+    # Calculate pNNx percentage ------------------------
+
+    Dx = np.abs(diffx) * 1000 # assume milliseconds as for RR intervals
+    pnns = np.array([5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
+
+    out = {} # dict used for output in place of MATLAB struct
+
+    for x in pnns:
+        out["pnn" + str(x) ] = sum(Dx > x) / (N-1)
+
+    return out
+
+
+
+
 
 def CO_trev(y,tau = 'ac'):
         if tau == 'ac':
@@ -925,16 +1301,98 @@ def CO_trev(y,tau = 'ac'):
         N = len(y)
         yn = y[0:N-tau]
         yn1 = y[tau:N]
-        
         raw = np.mean(np.power(yn1-yn,3)) / np.mean(np.power(yn1 - yn,2))**(3/2)
 
         return raw
 
-import warnings
-@numba.jit(nopython=True,parallel=True)
+def SY_LocalGlobal(y,subsetHow = 'l',n = ''):
+    if subsetHow == 'p' and n == '':
+        n = .1
+    elif n == '':
+        n = 100
+
+    N  = len(y)
+
+    if subsetHow == 'l':
+        r = range(0,min(n,N))
+    elif subsetHow == 'p':
+        if n > 1:
+            n = .1
+        r = range(0,round(N*n))
+    elif subsetHow == 'unicg':
+        r = np.round(np.arange(0,N,n)).astype(int)
+
+    elif subsetHow == 'randcg':
+        r = np.random.randint(N,size = n)
+    if len(r)<5:
+        out = np.nan
+        return out
+    out = {}
+
+    out['absmean'] = np.absolute(np.mean(y[r]))
+    out['std'] = np.std(y[r])
+    out['median'] = np.median(y[r])
+    out['iqr'] = np.absolute((1-stats.iqr(y[r]))/stats.iqr(y))
+    out['skew'] = np.absolute((1-stats.skew(y[r]))/stats.skew(y))
+    out['kurtosis'] = np.absolute((1-stats.kurtosis(y[r]))/stats.kurtosis(y))
+    out['ac1'] = np.absolute((1-CO_AutoCorr(y[r],1))/CO_AutoCorr(y,1))
+    out['Burstiness'] = np.absolute((1-DN_Burstiness(y[r]))/DN_Burstiness(y))
+
+    return out
+
+import itertools
+#import numba
+
+#@numba.jit(nopython=True,parallel=True)
+def EN_PermEn(y,m = 2,tau = 1):
+
+    x = BF_embed(y,tau,m)
+
+
+    Nx = x.shape[0]
+
+    permList = perms(m)
+    numPerms = len(permList)
+
+    countPerms = np.zeros(numPerms)
+
+
+    for j in range(Nx):
+        ix = np.argsort(x[j,:])
+
+        for k in range(numPerms):
+            if not (permList[k,:] - ix).all() :
+                countPerms[k] = countPerms[k] + 1
+                break
+
+    p = countPerms / Nx
+    p_0 = p[p > 0]
+    permEn = -sum(np.multiply(p_0,np.log2(p_0)))
+
+
+
+    mFact = math.factorial(m)
+    normPermEn = permEn / np.log2(mFact)
+
+    out = {'permEn':permEn,'normPermEn':normPermEn}
+
+    return out
+
+def perms(n):
+    permut = itertools.permutations(np.arange(n))
+    permut_array = np.empty((0,n))
+    for p in permut:
+        permut_array = np.append(permut_array,np.atleast_2d(p),axis=0)
+
+    return(permut_array)
+
+#import warnings
+#@numba.jit(nopython=True,parallel=True)
 def DN_cv(x,k = 1):
     # if k % 1 != 0 or k < 0:
     #     warnings.warn("k should probably be positive int")
+    if np.mean(x) == 0:
+        return np.nan
     return (np.std(x)**k) / (np.mean(x)**k)
 
 #@numba.jit(nopython=True,parallel=True)
@@ -996,7 +1454,7 @@ def SC_DFA(y):
 
     return p[0]
 
-@numba.jit(nopython=True,parallel=True)
+#@numba.jit(nopython=True,parallel=True)
 def DN_HighLowMu(y):
     mu = np.mean(y)
     mhi = np.mean(y[y>mu])

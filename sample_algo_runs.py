@@ -17,19 +17,18 @@ def read_in_data(id):
     hr = data[:,1]
     return(time,hr)
 
-
-#Reads in new nicu data from Doug
 def read_in_NICU_file(path):
     arrays = {}
     f = h5py.File(path,'r')
     for k, v in f.items():
         arrays[k] = np.array(v)
-
-    df = pd.DataFrame(np.transpose(arrays['vdata']),columns = get_column_names(f['vname'],f))
+    df = pd.DataFrame(np.transpose(arrays['vdata']))
+    df = df.dropna(axis=1, how='all')
+    df.columns = get_column_names(f['vname'],f)
     times = pd.Series(arrays['vt'][0], index=df.index)
+    df
 
     return df,times
-
 def get_column_names(vname,f):
     names = []
     for name in vname[0]:
@@ -37,6 +36,26 @@ def get_column_names(vname,f):
         col_name = ''.join(chr(i) for i in obj[:])
         names.append(col_name)
     return names
+
+#Reads in new nicu data from Doug
+# def read_in_NICU_file(path):
+#     arrays = {}
+#     f = h5py.File(path,'r')
+#     for k, v in f.items():
+#         arrays[k] = np.array(v)
+#
+#     df = pd.DataFrame(np.transpose(arrays['vdata']),columns = get_column_names(f['vname'],f))
+#     times = pd.Series(arrays['vt'][0], index=df.index)
+#
+#     return df,times
+#
+# def get_column_names(vname,f):
+#     names = []
+#     for name in vname[0]:
+#         obj = f[name]
+#         col_name = ''.join(chr(i) for i in obj[:])
+#         names.append(col_name)
+#     return names
 
 ########################
 #
@@ -84,10 +103,11 @@ time = time.to_numpy()
 num_cols = df.shape[1]
 time_series = {}
 for i in range(num_cols):
-    time_series[list(df.columns.values)[i]] = df[list(df.columns.values)[i]].to_numpy()
+    if list(df.columns.values)[i] == 'HR':
+        time_series[list(df.columns.values)[i]] = df[list(df.columns.values)[i]].to_numpy()
 interval_length = 60*10
 step_size = 60*5
-result = run.run_all(time_series,time)
-for series in result:
-    result[series].to_csv('/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_' + series + '_all.csv',index = False)
+result = run.run_all(time_series,time,6738,algos ='2')
+# for series in result:
+#     result[series].to_csv('/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_' + series + '_all.csv',index = False)
     #to add post meta data to mongo for each output

@@ -1,7 +1,7 @@
 import itertools
-import numba
+#import numba
 
-@numba.jit(nopython=True,parallel=True)
+#@numba.jit(nopython=True,parallel=True)
 def EN_PermEn(y,m = 2,tau = 1):
 
     x = BF_embed(y,tau,m)

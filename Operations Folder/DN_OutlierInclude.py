@@ -2,7 +2,7 @@ def DN_OutlierInclude(y,thresholdHow='abs',inc=.01):
     if not BF_iszscored(y):
         muhat, sigmahat = stats.norm.fit(y)
         y = (y - muhat) / sigmahat
-        warnings.warn('DN_OutlierInclude y should be z scored. So just converted y to z-scores')
+        #warnings.warn('DN_OutlierInclude y should be z scored. So just converted y to z-scores')
     N = len(y)
     if thresholdHow == 'abs':
         thr = np.arange(0,np.max(np.absolute(y)),inc)

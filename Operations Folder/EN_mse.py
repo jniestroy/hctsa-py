@@ -1,4 +1,4 @@
-def EN_mse(y,scale=range(1,11),m=2,r=.15,adjust_r=True):
+def EN_mse(y,scale=range(2,11),m=2,r=.15,adjust_r=True):
 
     minTSLength = 20
     numscales = len(scale)
@@ -13,13 +13,17 @@ def EN_mse(y,scale=range(1,11),m=2,r=.15,adjust_r=True):
 
     for si in range(numscales):
         if len(y_cg[si]) >= minTSLength:
+
             sampEnStruct = EN_SampEn(y_cg[si],m,r)
             outEns.append(sampEnStruct)
         else:
             outEns.append(np.nan)
     sampEns = []
     for out in outEns:
-        sampEns.append(out['sampen'][1])
+        if not isinstance(out,dict):
+            sampEns.append(np.nan)
+            continue
+        sampEns.append(out['Sample Entropy'])
 
     maxSampen = np.max(sampEns)
     maxIndx = np.argmax(sampEns)
@@ -33,7 +37,11 @@ def EN_mse(y,scale=range(1,11),m=2,r=.15,adjust_r=True):
 
     meanchSampen = np.mean(np.diff(sampEns))
 
-    out = {'sampEns':sampEns,'max Samp En':maxSampen,'max point':scale[maxIndx],'min Samp En':minSampen,\
+    out = {'max Samp En':maxSampen,'max point':scale[maxIndx],'min Samp En':minSampen,\
     'min point':scale[minIndx],'mean Samp En':meanSampen,'std Samp En':stdSampen, 'Mean Change':meanchSampen}
+
+    i = 1
+    for sampEn in sampEns:
+        out['sampEn ' + str(i)] = sampEn
 
     return out

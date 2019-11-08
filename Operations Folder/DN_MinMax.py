@@ -1,4 +1,4 @@
-@numba.jit(nopython=True,parallel=True)
+#@numba.jit(nopython=True,parallel=True)
 def DN_MinMax(y,which = 'max'):
     # if not isinstance(y,np.ndarray):
     #     y = np.asarray(y)

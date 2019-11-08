@@ -34,7 +34,7 @@ def read_in_NICU_file(path):
     return df,times
 
 
-functions = [CO_AutoCorr,CO_f1ecac,CO_FirstMin,CO_FirstZero]
+functions = [CO_AutoCorr,CO_f1ecac,CO_FirstMin,CO_FirstZero,]
 functions = [DN_ObsCount]
 mat = scipy.io.loadmat('/Users/justinniestroy-admin/Documents/Work/Randall Data/houlter data/RR/UVA0013_rr.mat',squeeze_me=True)
 all = []
@@ -48,14 +48,44 @@ filepath = '/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_vitals.mat'
 # for i in range(num_cols):
 #     time_series[list(df.columns.values)[i]] = df[list(df.columns.values)[i]].to_numpy()
 #rr = rr[0:500]
+functions = [CO_RM_AMInformation]
+#functions  = [DN_Moments,DN_Withinp,DN_Quantile,FC_Suprise,MD_hrv_classic,MD_pNN,EN_PermEn, DN_OutlierInclude,DN_Burstiness,DN_pleft,CO_FirstZero,DN_Fit_mle,CO_FirstMin,DN_IQR,DN_CompareKSFit,DN_Mode,EN_SampEn,SY_Trend,DN_Mean,CO_glscf,DN_Cumulants,DN_Range,DN_FitKernalSmooth,DN_Median,DN_Spread,DN_MinMax,DN_CustomSkewness,EN_mse,IN_AutoMutualInfo,EN_CID,DN_Unique,DT_IsSeasonal,EN_ApEn,SC_HurstExp,DN_ObsCount,EN_ShannonEn,CO_tc3,DN_nlogL_norm,CO_AutoCorr,CO_f1ecac,DN_ProportionValues,DN_STD,CO_trev,DN_cv,DN_TrimmedMean,SC_DFA,DN_HighLowMu]
+
 m = []
 y = np.ones(5000)
-y = np.asarray([4,7,9,10,6,11,3])
-print(rr)
+y = np.asarray([141,142,141,145,151,153,158,141,141,142])
+# y = np.random.rand(500)
+# x = np.random.rand(500)
+# z = np.random.rand(1000)
 #x  = 100 * np.sin(5 * y) + 25 + np.random.normal(0,5,5000)
 #start_time = time.time()
-#for func in functions:
-    #m.append(CO_AutoCorr(rr,i,'test'))
+for func in functions:
+    start_time = time.time()
+    print(func(y,5))
+
+#
+# min = 500
+# test = {}
+# for func in functions:
+#     start_time = time.time()
+#     func(y)
+#     func(x)
+#     func(z)
+#     took = time.time() - start_time
+#     test[str(func).split(' ')[1]] = took
+#     if took < min:
+#         min = took
+# test['min']= min
+# import json
+# with open('result-new.json', 'w') as fp:
+#     json.dump(test, fp)
+#
+# for key in test:
+#     test[key] = test[key] / min
+# print(test)
+
+
+
 # print(len(time_series['HR']))
 # for i in range(1,int(58000 / 300)):
 #     print(i)

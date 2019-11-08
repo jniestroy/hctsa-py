@@ -1,8 +1,6 @@
 from scipy import signal
 def SY_Trend(y):
-    if not BF_iszscored(y):
-        warnings.warn('y should be zero scored. ')
-        #y = (y - np.mean(y)) / np.std(y)
+
     N  = len(y)
     stdRatio = np.std(signal.detrend(y)) / np.std(y)
 

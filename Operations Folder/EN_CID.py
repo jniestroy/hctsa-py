@@ -15,7 +15,7 @@ def EN_CID(y):
     return out
 
 def f_CE1(y):
-    return np.sqrt(np.mean( 1 + np.power(np.diff(y),2) ) )
+    return np.sqrt(np.mean(np.power(np.diff(y),2) ) )
 
 def f_CE2(y):
     return np.mean(np.sqrt( 1 + np.power(np.diff(y),2) ) )

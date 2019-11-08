@@ -2,11 +2,13 @@ import numpy as np
 import multiprocessing as mp
 from functools import partial
 import pandas as pd
-import make_operations
-operations = make_operations.make_operations()
-make_operations.make_otherfunctions()
+import csv
+#import make_operations
+#operations = make_operations.make_operations()
+#make_operations.make_otherfunctions()
 from Operations import *
 from Periphery import *
+import time
 
 def read_in_data(id):
     id = str(id).zfill(4)
@@ -116,7 +118,10 @@ def run_histogram_algos(y,algos = 'all',results = {},impute = False):
     return results
 
 def time_series_dependent_algos(y,algos,results,t):
-
+        if np.count_nonzero(np.isnan(y)) > 0:
+            #print(y)
+            #print(t)
+            raise Exception('Missing Value')
         #print('Corr')
         if 'CO_AutoCorr' in algos:
             corr = CO_AutoCorr(y,[],'Forier',t)
@@ -170,6 +175,7 @@ def time_series_dependent_algos(y,algos,results,t):
         if 'EN_ApEn' in algos:
             results['ApEn'] = EN_ApEn(y)
 
+
         if 'EN_CID' in algos:
             out = EN_CID(y)
             results = parse_outputs(out,results,'Complexity')
@@ -180,9 +186,9 @@ def time_series_dependent_algos(y,algos,results,t):
 
         if 'EN_SampEn' in algos:
             out = EN_SampEn(y)
-            results = parse_outputs(out,results,'Sample Entropy 2, .1')
-            out = EN_SampEn(y,3,.25)
-            results = parse_outputs(out,results,'Sample Entropy 3, .25')
+            results['Sample Entropy'] = out["Sample Entropy"]
+            results["Quadratic Entropy"] = out["Quadratic Entropy"]
+
 
         if 'IN_AutoMutualInfo' in algos:
             out = IN_AutoMutualInfo(y)
@@ -195,12 +201,70 @@ def time_series_dependent_algos(y,algos,results,t):
                 out = SY_Trend(y)
             results = parse_outputs(out,results,'Trend')
 
-        if 'SC_HurstExp' in algos:
-            results['Hurst Exp'] = SC_HurstExp(y)
-        if 'SC_DFA' in algos:
-            results['DFA alpha'] = SC_DFA(y)
+        # if 'SC_HurstExp' in algos:
+        #     results['Hurst Exp'] = SC_HurstExp(y)
+        # if 'SC_DFA' in algos:
+        #     results['DFA alpha'] = SC_DFA(y)
 
         return results
+
+def round2(y):
+    results = {}
+
+    out  = FC_Suprise(y)
+    results = parse_outputs(out,results,'FC_Suprise')
+
+    for i in range(2,6):
+        for j in range(2,8):
+            out = EN_PermEn(y,i,j)
+
+            results = parse_outputs(out,results,'EN_PermEn '+ str(i) + ' ,'  + str(j))
+
+    for i in range(3,11):
+        for j in [.15,.25,.3]:
+            out = EN_SampEn(y,i,j)
+            results['Sample Entropy ' + str(i) + ' ' + str(j)] = out["Sample Entropy"]
+            results["Quadratic Entropy "+ str(i) + ' ' + str(j)] = out["Quadratic Entropy"]
+
+    try:
+        out = MD_hrv_classic(y)
+        results = parse_outputs(out,results,'MD_hrv')
+    except:
+        print('Failed hrv')
+    out = MD_pNN(y)
+    results = parse_outputs(out,results,'MD_pNN')
+
+    results['SC_HurstExp'] = SC_HurstExp(y)
+
+    results['SC_DFA'] = SC_DFA(y)
+
+    for i in range(2,5):
+        for j in [.2,.25,.4]:
+
+            out = EN_mse(y,range(2,12),i,j)
+
+            results = parse_outputs(out,results,'EN_mse '+ str(i) + ' ,'  + str(j))
+
+    for n in [10,20,50,100,250]:
+        out = SY_LocalGlobal(y,'l',n)
+        if isinstance(out,dict):
+            results = parse_outputs(out,results,'SY_LocalGlobal_l' + str(n))
+    for n in [.05,.1,.2,.5]:
+        out = SY_LocalGlobal(y,'p',n)
+        if isinstance(out,dict):
+            results = parse_outputs(out,results,'SY_LocalGlobal_p' + str(n))
+    for n in [10,20,50,100,250]:
+        out = SY_LocalGlobal(y,'unicg',n)
+        if isinstance(out,dict):
+            results = parse_outputs(out,results,'SY_LocalGlobal_unicg' + str(n))
+    for n in [10,20,50,100,250]:
+        out = SY_LocalGlobal(y,'randcg',n)
+        if isinstance(out,dict):
+            results = parse_outputs(out,results,'SY_LocalGlobal_randcg' + str(n))
+    for i in range(0,16):
+        results['CO_RM_AMInformation ' + str(i)] = CO_RM_AMInformation(y,i)
+
+    return results
 
 def run_algos(y,algos = 'all',last_non_nan = np.nan,t=1):
 
@@ -209,10 +273,17 @@ def run_algos(y,algos = 'all',last_non_nan = np.nan,t=1):
     if algos == 'all':
         algos = ['EN_PermEm', 'DN_Moments', 'DN_Withinp', 'DN_Quantile', 'DN_RemovePoints', 'DN_OutlierInclude', 'DN_Burstiness', 'DN_pleft', 'CO_FirstZero', 'DN_Fit_mle', 'CO_FirstMin', 'DN_IQR', 'DN_CompareKSFit', 'DN_Mode', 'EN_SampEn', 'SY_Trend', 'DN_Mean', 'CO_glscf', 'DN_Cumulants', 'DN_Range', 'DN_FitKernalSmooth', 'DN_Median', 'DN_Spread', 'DN_MinMax', 'DN_CustomSkewness', 'EN_mse', 'IN_AutoMutualInfo', 'EN_CID', 'DN_Unique', 'DT_IsSeasonal', 'EN_ApEn', 'SC_HurstExp', 'DN_ObsCount',  'EN_ShannonEn', 'dfa', 'CO_tc3', 'DN_nlogL_norm', 'CO_AutoCorr', 'CO_f1ecac', 'DN_ProportionValues', 'DN_STD', 'CO_trev', 'DN_cv', 'DN_TrimmedMean', 'SC_DFA', 'DN_HighLowMu']
 
+    if algos == '2':
+        algos = ['EN_PermEm', 'FC_Suprise','MD_hrv_classic','MD_pNN','DN_Moments', 'DN_Withinp', 'DN_Quantile', 'DN_RemovePoints', 'DN_OutlierInclude', 'DN_Burstiness', 'DN_pleft', 'CO_FirstZero', 'DN_Fit_mle', 'CO_FirstMin', 'DN_IQR', 'DN_CompareKSFit', 'DN_Mode', 'EN_SampEn', 'SY_Trend', 'DN_Mean', 'CO_glscf', 'DN_Cumulants', 'DN_Range', 'DN_FitKernalSmooth', 'DN_Median', 'DN_Spread', 'DN_MinMax', 'DN_CustomSkewness', 'EN_mse', 'IN_AutoMutualInfo', 'EN_CID', 'DN_Unique', 'DT_IsSeasonal', 'EN_ApEn', 'SC_HurstExp', 'DN_ObsCount',  'EN_ShannonEn', 'dfa', 'CO_tc3', 'DN_nlogL_norm', 'CO_AutoCorr', 'CO_f1ecac', 'DN_ProportionValues', 'DN_STD', 'CO_trev', 'DN_cv', 'DN_TrimmedMean', 'SC_DFA', 'DN_HighLowMu']
+
+        y_imputed = impute(y,last_non_nan)
+        results = round2(y_imputed)
+
+        return(results)
     #Make sure time series isn't empty
     if 'DN_ObsCount' in algos:
         results['Observations'] = DN_ObsCount(y)
-        if results['Observations'] == 0:
+        if results['Observations'] <= 10:
             return results
     if len(algos)>1:
     #Compute all histogram stats on non-imputed data
@@ -225,10 +296,10 @@ def run_algos(y,algos = 'all',last_non_nan = np.nan,t=1):
         return results
 
     #impute data for algos that can't run with nans
-    y = impute(y,last_non_nan)
+    y_imputed = impute(y,last_non_nan)
 
 
-    results = time_series_dependent_algos(y,algos,results,t)
+    results = time_series_dependent_algos(impute(y,last_non_nan),algos,results,t)
 
     return results
 
@@ -257,7 +328,7 @@ def all(t,hr,time,interval_length = 60*10):
     results['time'] = t
     return results
 
-def all_times(t,series,time,interval_length = 600):
+def all_times(t,series,time,interval_length = 600,algos = 'all'):
     indx = get_interval(interval_length,int(t),time)
     indx = indx[0]
     if len(indx) <= 1:
@@ -269,51 +340,77 @@ def all_times(t,series,time,interval_length = 600):
             lastvalue = series[last_non_nan_indx]
         else:
             lastvalue = np.nan
-
-        results = run_algos(series[indx],'all',lastvalue,t)
+        results = run_algos(series[indx],algos,lastvalue,t)
         #results = run_algos(series[indx],['DN_ObsCount'],lastvalue,t)
     else:
         #results = run_algos(series[indx],['DN_ObsCount'],1,t)
-        results = run_algos(series[indx],'all',1,t)
+        results = run_algos(series[indx],algos,1,t)
     results['time'] = t
     return results
 
-def impute(y,last):
-    if y[0] == np.nan and last == np.nan:
-        min = np.min(np.argwhere(~np.isnan(y)))
-        return impute(y[min:],last)
-    elif y[0] == np.nan:
-        y[0] = last
-    y = nanfill(y)
-    return y
 
-def nanfill(y):
-    for i in np.argwhere(np.isnan(y)):
-        y[i] = y[i-1]
-    return y
+def impute(y_test,last):
+    if np.isnan(y_test[0]) and np.isnan(last):
+        min = np.min(np.argwhere(~np.isnan(y_test)))
+        return y_test[min:]
+    elif np.isnan(y_test[0]):
+        y_test[0] = last
+    y_test = nanfill(y_test)
+    return y_test
 
-def run_all(time_series,time,interval_length = 60*10,step_size=60*5):
-    end_times = np.arange(np.min(time) + interval_length,np.max(time),step_size)
-    #print(end_times)
+def nanfill(x):
+    for i in np.argwhere(np.isnan(x)):
+        x[i] = x[i-1]
+    return x
+
+def run_all(time_series,time1,id,interval_length = 60*10,step_size=60*5,algos = 'all'):
+    end_times = np.arange(np.min(time1) + interval_length,np.max(time1),step_size)
+    #print(get_interval(interval_length,int(end_times[1]),time1))
     if not isinstance(time_series,dict):
         time_series = {'y':time_series}
     full_results = {}
     for key, data in time_series.items():
         print("Analyzing " + key)
+
+        np.seterr(divide='ignore')
+        start = time.time()
         pool = mp.Pool(mp.cpu_count())
         #results = [pool.apply(all, args=(hr,time,interval_length,t)) for t in end_times]
-        results = pool.map(partial(all_times,series = data,time = time), [t for t in end_times])
+        results = pool.map(partial(all_times,series = data,time = time1,algos = algos), [t for t in end_times])
         pool.close()
-        #results = all_times(end_times[1],data,time)
-        first = True
-        for result in results:
-            if first:
 
-                df = pd.DataFrame(result,index = [0])[:1]
-                first  = False
-                continue
-            else:
-                df = df.append(results, ignore_index=True)
-        full_results[key] = df
-        #break
+        print("Performing Calcs took " + str(time.time() - start))
+        #results = all_times(end_times[1],data,time)
+
+        if algos == '2':
+            print(results[15].keys())
+            for guy in results:
+                if len(guy) > 327:
+                    columns = list(guy.keys())
+                    break
+            for result in results:
+                for column in columns:
+                    if column not in result.keys():
+                        result[column] = ''
+
+            with open('/Results/test_' + str(id)  + key + '.csv', 'w') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=columns)
+                writer.writeheader()
+                writer.writerows(results)
+
+            return
+
+        columns = ['Observations','mean','range','iqr','median', 'max', 'min', 'mode', 'skew1', 'skew2', 'kurt1', 'kurt2', 'Burstiness', 'Percent Unique', 'Within 1 std', 'Within 2 std', 'Shannon Entropy', 'std', 'Moment 2', 'Moment 3', 'Moment 4', 'Moment 5', 'Moment 6', 'pleft', 'Pearson Skew', 'High Low Mean Ratio', 'Log liklihood of Norm fit', 'Quantile 50', 'Quantile 75', 'Quantile 90', 'Quantile 95', 'Quantile 99', 'DN_RemovePoints fzcacrat', 'DN_RemovePoints ac1rat', 'DN_RemovePoints ac1diff', 'DN_RemovePoints ac2rat', 'DN_RemovePoints ac2diff', 'DN_RemovePoints ac3rat', 'DN_RemovePoints ac3diff', 'DN_RemovePoints sumabsacfdiff', 'DN_RemovePoints mean', 'DN_RemovePoints median', 'DN_RemovePoints std', 'DN_RemovePoints skewnessrat', 'DN_RemovePoints kurtosisrat', 'Mean Abs Deviation', 'Median Abs Deviation', 'trimmed mean 50', 'trimmed mean 75', 'trimmed mean 25', 'DN_cv 1', 'DN_cv 2', 'DN_cv 3', 'AutoCorr lag 1', 'AutoCorr lag 2', 'AutoCorr lag 3', 'AutoCorr lag 4', 'AutoCorr lag 5', 'AutoCorr lag 6', 'AutoCorr lag 7', 'AutoCorr lag 8', 'AutoCorr lag 9', 'AutoCorr lag 10', 'AutoCorr lag 11', 'AutoCorr lag 12', 'AutoCorr lag 13', 'AutoCorr lag 14', 'AutoCorr lag 15', 'AutoCorr lag 16', 'AutoCorr lag 17', 'AutoCorr lag 18', 'AutoCorr lag 19', 'AutoCorr lag 20', 'AutoCorr lag 21', 'AutoCorr lag 22', 'AutoCorr lag 23', 'AutoCorr lag 24', 'AutoCorr lag 25', 'f1ecac', 'FirstMin', 'FirstZero', 'glscf 1 1', 'glscf 1 2', 'glscf 1 3', 'glscf 1 4', 'glscf 2 1', 'glscf 2 2', 'glscf 2 3', 'glscf 2 4', 'glscf 3 1', 'glscf 3 2', 'glscf 3 3', 'glscf 3 4', 'glscf 4 1', 'glscf 4 2', 'glscf 4 3', 'glscf 4 4', 'tc3', 'trev', 'DN_CompareKSFit adiff', 'DN_CompareKSFit peaksepy', 'DN_CompareKSFit relent', 'IsSeasonal?', 'ApEn', 'Complexity CE1', 'Complexity CE2', 'Complexity minCE1', 'Complexity minCE2', 'Complexity CE1_norm', 'Complexity CE2_norm',  'Sample Entropy',  'Quadratic Entropy', 'Auto Mutual Info Auto Mutual 1', 'Trend stdRatio', 'Trend gradient', 'Trend intercept', 'Trend meanYC', 'Trend stdYC', 'Trend gradientYC', 'Trend interceptYC', 'Trend meanYC12', 'Trend meanYC22', 'Hurst Exp', 'DFA alpha', 'time']
+
+        start = time.time()
+        for result in results:
+            for column in columns:
+                if column not in result.keys():
+                    result[column] = ''
+
+        with open('/Results/UVA_' + str(id)  + key + '.csv', 'w') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=columns)
+            writer.writeheader()
+            writer.writerows(results)
+
     return full_results

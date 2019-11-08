@@ -28,3 +28,4 @@ def make_otherfunctions():
         test.write('\n')
         functions.append(module[:-3])
     return(functions)
+make_operations()

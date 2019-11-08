@@ -6,7 +6,6 @@ def CO_trev(y,tau = 'ac'):
         N = len(y)
         yn = y[0:N-tau]
         yn1 = y[tau:N]
-        
         raw = np.mean(np.power(yn1-yn,3)) / np.mean(np.power(yn1 - yn,2))**(3/2)
 
         return raw
