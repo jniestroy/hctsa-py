@@ -21,6 +21,8 @@ def read_in_NICU_file(path):
     arrays = {}
     f = h5py.File(path,'r')
     for k, v in f.items():
+        if k != 'vdata' and k != 'vt':
+            continue
         arrays[k] = np.array(v)
     df = pd.DataFrame(np.transpose(arrays['vdata']))
     df = df.dropna(axis=1, how='all')
@@ -37,6 +39,23 @@ def get_column_names(vname,f):
         names.append(col_name)
     return names
 
+
+pid = '1282'
+filepath = '/Users/justinniestroy-admin/Desktop/PreVent/UVA_'+pid + '_vitals.mat'
+#filepath = '/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_vitals.mat'
+df,time = read_in_NICU_file(filepath)
+time = time.to_numpy()
+num_cols = df.shape[1]
+time_series = {}
+for i in range(num_cols):
+    if list(df.columns.values)[i] == 'HR' or list(df.columns.values)[i] == 'RESP' or list(df.columns.values)[i] == 'SPO2-%':
+        time_series[list(df.columns.values)[i]] = df[list(df.columns.values)[i]].to_numpy()
+interval_length = 60*10
+step_size = 60*5
+result = run.run_all(time_series,time,int(pid),algos ='all')
+# for series in result:
+#     result[series].to_csv('/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_' + series + '_all.csv',index = False)
+    #to add post meta data to mongo for each output
 #Reads in new nicu data from Doug
 # def read_in_NICU_file(path):
 #     arrays = {}
@@ -96,18 +115,3 @@ def get_column_names(vname,f):
 #                         .config("spark.some.config.option", true).getOrCreate()
 #
 # df = spark.read.parquet("s3://path/to/parquet/file.parquet")
-
-filepath = '/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_vitals.mat'
-df,time = read_in_NICU_file(filepath)
-time = time.to_numpy()
-num_cols = df.shape[1]
-time_series = {}
-for i in range(num_cols):
-    if list(df.columns.values)[i] == 'HR':
-        time_series[list(df.columns.values)[i]] = df[list(df.columns.values)[i]].to_numpy()
-interval_length = 60*10
-step_size = 60*5
-result = run.run_all(time_series,time,6738,algos ='2')
-# for series in result:
-#     result[series].to_csv('/Users/justinniestroy-admin/Desktop/NICU Vitals/UVA_6738_' + series + '_all.csv',index = False)
-    #to add post meta data to mongo for each output
