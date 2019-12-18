@@ -24,7 +24,7 @@ def SB_CoarseGrain(y, howtocg, numGroups):
     # --------------------------------------------------------------------------------------------------------------------------------
 
     N = len(y)
-
+    
     if howtocg not in ['quantile', 'updown', 'embed2quadrants', 'embed2octants']:
         print("Error: "+ howtocg + " is an unknown coarse-graining method")
         print("Choose between: quantile, updown, embed2quadrants, embed2octants ")

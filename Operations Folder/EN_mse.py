@@ -5,11 +5,14 @@ def EN_mse(y,scale=range(2,11),m=2,r=.15,adjust_r=True):
     y_cg = []
 
     for i in range(numscales):
+
         bufferSize = scale[i]
         y_buffer = BF_makeBuffer(y,bufferSize)
         y_cg.append(np.mean(y_buffer,1))
 
     outEns = []
+
+
 
     for si in range(numscales):
         if len(y_cg[si]) >= minTSLength:
@@ -43,5 +46,6 @@ def EN_mse(y,scale=range(2,11),m=2,r=.15,adjust_r=True):
     i = 1
     for sampEn in sampEns:
         out['sampEn ' + str(i)] = sampEn
+        i = i + 1
 
     return out

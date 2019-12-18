@@ -4,6 +4,101 @@ def DN_Moments(y,theMom = 1):
     else:
         return 0
 
+import scipy
+
+def SB_TransitionMatrix(y,howtocg = 'quantile',numGroups = 2,tau = 1):
+
+    if tau == 'ac':
+        tau = CO_FirstZero(y,'ac')
+
+    if tau > 1:
+
+        y = scipy.signal.resample(y,math.ceil(len(y) / tau))
+
+    N = len(y)
+
+    yth = SB_CoarseGrain(y,howtocg,numGroups)
+
+    if yth.shape[1] > yth.shape[0]:
+
+        yth = yth.transpose()
+
+    T = np.zeros((numGroups,numGroups))
+
+
+    for i in range(0,numGroups):
+
+        ri = (yth == i + 1)
+
+        if sum(ri) == 0:
+
+            T[i,:] = 0
+
+        else:
+
+            ri_next = np.append([False],ri[:-1])
+
+            for j in range(numGroups):
+
+                T[i,j] = np.sum((yth[ri_next] == j + 1))
+    out = {}
+
+    T = T / ( N - 1 )
+
+    if numGroups == 2:
+
+        for i in range(2):
+
+            for j in range(2):
+
+                out['T' + str(i) + str(j)] = T[i,j]
+
+    elif numGroups == 3:
+
+        for i in range(3):
+
+            for j in range(3):
+
+                out['T' + str(i) + str(j)] = T[i,j]
+
+    elif numGroups > 3:
+
+        for i in range(numGroups):
+
+            out['TD' + str(i)] = T[i,i]
+
+
+    out['ondiag'] = np.sum(np.diag(T))
+
+    out['stddiag'] = np.std(np.diag(T))
+
+    out['symdiff'] = np.sum(np.sum(np.absolute(T-T.transpose())))
+
+    out['symsumdiff'] = np.sum(np.sum(np.tril(T,-1)) - np.sum(np.triu(T,1)))
+
+    covT = np.cov(T.transpose())
+
+
+    out['sumdiagcov'] = np.sum(np.diag(covT))
+
+    eigT = np.linalg.eigvals(T)
+
+    out['stdeig'] = np.std(eigT)
+
+    out['maxeig'] = np.real(np.max(eigT))
+
+    out['mineig'] = np.real(np.min(eigT))
+
+    eigcovT = np.linalg.eigvals(covT)
+
+    out['stdcoveig'] = np.std(eigcovT)
+
+    out['maxcoveig'] = np.max(eigcovT)
+
+    out['mincoveig'] = np.min(eigcovT)
+
+    return out
+
 #@numba.jit(nopython=True,parallel=True)
 def DN_Withinp(x,p = 1,meanOrMedian = 'mean'):
     N = len(x)
@@ -17,6 +112,97 @@ def DN_Withinp(x,p = 1,meanOrMedian = 'mean'):
     else:
         raise Exception('Unknown meanOrMedian should be mean or median')
     return np.sum((x >= mu-p*sig) & (x <= mu + p*sig)) / N
+
+def SY_SpreadRandomLocal(y,l = 100,numSegs = 25,randomSeed = 0):
+
+    if isinstance(l,str):
+        taug = CO_FirstZero(y,'ac')
+
+        if l == 'ac2':
+            l = 2*taug
+        else:
+            l = 5*taug
+
+    N = len(y)
+
+    if l > .9 * N:
+        #print('Time series too short for given l')
+        return np.nan
+
+    numFeat = 8
+
+    qs = np.zeros((numSegs,numFeat))
+
+    for j in range(numSegs):
+
+        ist = np.random.randint(N - l)
+        ifh = ist + l
+
+        ysub = y[ist:ifh]
+
+        taul = CO_FirstZero(ysub,'ac')
+
+        qs[j,0] = np.mean(ysub)
+
+        qs[j,1] = np.std(ysub)
+
+        qs[j,2] = stats.skew(ysub)
+
+        qs[j,3] = stats.kurtosis(ysub)
+
+        #entropyDict = EN_SampEn(ysub,1,.15)
+
+        #qs[j,4] = entropyDict['Quadratic Entropy']
+
+        qs[j,5] =  CO_AutoCorr(ysub,1,'Fourier')
+
+        qs[j,6] = CO_AutoCorr(ysub,2,'Fourier')
+
+        qs[j,7] = taul
+
+
+    fs = np.zeros((numFeat,2))
+
+    fs[:,0] = np.nanmean(qs,axis = 0)
+
+    fs[:,1] = np.nanstd(qs,axis = 0)
+
+    out = {}
+
+    out['meanmean'] = fs[0,0]
+
+    out['meanstd'] = fs[1,0]
+
+    out['meanskew'] = fs[2,0]
+
+    out['meankurt'] = fs[3,0]
+
+    #out['meansampEn'] = fs[4,0]
+
+    out['meanac1'] = fs[5,0]
+
+    out['meanac2'] = fs[6,0]
+
+    out['meantaul'] = fs[7,0]
+
+
+    out['stdmean'] = fs[0,1]
+
+    out['stdstd'] = fs[1,1]
+
+    out['stdskew'] = fs[2,1]
+
+    out['stdkurt'] = fs[3,1]
+
+    #out['stdsampEn'] = fs[4,1]
+
+    out['stdac1'] = fs[5,1]
+
+    out['stdac2'] = fs[6,1]
+
+    out['stdtaul'] = fs[7,1]
+
+    return out
 
 #@numba.jit(nopython=True)
 #Quantile function seems to be slower with numba
@@ -436,15 +622,18 @@ def EN_SampEn(x,m=2,r=.2,scale=True):
     warnings.filterwarnings('ignore')
     if scale:
         r = np.std(x) * r
+
     templates = make_templates(x,m)
+    #print(templates)
     A = 0
     B = 0
     for i in range(templates.shape[0]):
         template = templates[i,:]
-        A = A + np.sum(np.amax(np.abs(templates-template), axis=1) < r) -1
+        A = A + np.sum(np.amax(np.absolute(templates-template), axis=1) < r) -1
         B = B + np.sum(np.amax(np.absolute(templates[:,0:m]-template[0:m]),axis=1) < r) - 1
     if B == 0:
         return {'Sample Entropy':np.nan,"Quadratic Entropy":np.nan}
+    
     return {'Sample Entropy':- np.log(A/B),"Quadratic Entropy": - np.log(A/B) + np.log(2*r)}
 #@numba.jit(nopython=True,parallel=True)
 def make_templates(x,m):
@@ -460,6 +649,7 @@ def make_templates(x,m):
 #         r = r*np.std(y)
 #     M = M + 1
 #     N = len(y)
+#     print('hi')
 #     lastrun = np.zeros(N)
 #     run = np.zeros(N)
 #     A = np.zeros(M)
@@ -494,13 +684,13 @@ def make_templates(x,m):
 #         p[m] = A[m] / B[m-1]
 #         e[m] = -np.log(p[m])
 #     i = 0
-#     out = {'sampen':np.zeros(len(e)),'quadSampEn':np.zeros(len(e))}
-#     for ent in e:
-#         quaden1 = ent + np.log(2*r)
-#         out['sampen'][i] = ent
-#         out['quadSampEn'][i] = quaden1
-#         i = i + 1
-#
+#     # out = {'sampen':np.zeros(len(e)),'quadSampEn':np.zeros(len(e))}
+#     # for ent in e:
+#     #     quaden1 = ent + np.log(2*r)
+#     #     out['sampen'][i] = ent
+#     #     out['quadSampEn'][i] = quaden1
+#     #     i = i + 1
+#     out = {'Sample Entropy':e[1],'Quadratic Entropy':e[1] + np.log(2*r)}
 #     return out
 
 from scipy import signal
@@ -687,8 +877,8 @@ def CO_RM_AMInformation(*args):
 
     y = args[0]
 
-    # if np.std(y) == 0:
-    #     return np.nan
+    if np.std(y) == 0:
+        return np.nan
 
     if nargin == 2:
         tau = args[1]
@@ -731,11 +921,14 @@ def EN_mse(y,scale=range(2,11),m=2,r=.15,adjust_r=True):
     y_cg = []
 
     for i in range(numscales):
+
         bufferSize = scale[i]
         y_buffer = BF_makeBuffer(y,bufferSize)
         y_cg.append(np.mean(y_buffer,1))
 
     outEns = []
+
+
 
     for si in range(numscales):
         if len(y_cg[si]) >= minTSLength:
@@ -769,6 +962,7 @@ def EN_mse(y,scale=range(2,11),m=2,r=.15,adjust_r=True):
     i = 1
     for sampEn in sampEns:
         out['sampEn ' + str(i)] = sampEn
+        i = i + 1
 
     return out
 
@@ -1105,6 +1299,35 @@ def DN_ProportionValues(x,propWhat = 'positive'):
     else:
         raise Exception('Only negative, positve, zeros accepted for propWhat.')
 
+from matplotlib import mlab
+def SY_PeriodVital(x):
+
+    f1 = 1
+    f2 = 6
+
+    z = np.diff(x)
+
+    [F, t, p] =  signal.spectrogram(z,fs = 60)
+
+    f = np.logical_and(F >= f1,F <= f2)
+
+    p = p[f]
+
+    F = F[f]
+
+    Pmean = np.mean(p)
+
+    Pmax = np.max(p)
+    ff = np.argmax(p)
+    if ff >= len(F):
+        Pf = np.nan
+    else:
+        Pf = F[ff]
+    Pr = Pmax / Pmean
+    Pstat = np.log(Pr)
+
+    return {'Pstat':Pstat,'Pmax':Pmax,'Pmean':Pmean,'Pf':Pf}
+
 
 import numpy as np
 import scipy
@@ -1163,7 +1386,7 @@ def MD_hrv_classic(y):
 
     #calculate PSD, DOES NOT MATCH UP WITH MATLAB -----------------------------------------------------------------
     F, Pxx = signal.periodogram(y, window= np.hanning(N)) #hanning confirmed to do the same thing as hann in matlab, periodogram() is what differs
-
+    
     # calculate spectral measures such as subband spectral power percentage, LF/HF ratio etc.
 
 
@@ -1238,7 +1461,7 @@ def MD_hrv_classic(y):
     # Poincare plot measures ---------------------------------------------------------------------------
     rmssd = np.std(diffy, ddof=1) #set delta degrees of freedom to 1 to get same result as matlab
     sigma = np.std(y, ddof=1)
-    
+
     out["SD1"] = 1/math.sqrt(2) * rmssd * 1000
     out["SD2"] = math.sqrt(2 * sigma**2 - (1/2) * rmssd**2) * 1000
 
@@ -1293,6 +1516,202 @@ def MD_pNN(x):
 
 
 
+
+import numpy as np
+from scipy import stats
+import statsmodels.sandbox.stats.runs as runs
+
+# 18/21 output statistics fully implemented from MATLAB, the other three are either from complex helper functions or MATLAB functions that don't transfer well
+
+def PH_Walker(y, walkerRule='prop', walkerParams=np.array([])):
+    """
+
+    PH_Walker simulates a hypothetical walker moving through the time domain
+
+    the hypothetical particle (or 'walker') moves in response to values of the time series at each point
+
+    Outputs from this operation are summaries of the walkers motion, and comparisons of it to the original time series
+
+    :param y: the input time series
+    :param walkerRule: the kinematic rule by which the walker moves in response to the time series over time
+            (i) 'prop': the walker narrows the gap between its value and that of the time series by a given proportion p
+
+            (ii) 'biasprop': the walker is biased to move more in one direction; when it is being pushed up by the time
+            series, it narrows the gap by a proportion p_{up}, and when it is being pushed down by the
+            time series it narrows the gap by a (potentially different) proportion p_{down}. walkerParams = [pup,pdown]
+
+            (iii) 'momentum': the walker moves as if it has mass m and inertia
+             from the previous time step and the time series acts
+             as a force altering its motion in a classical
+             Newtonian dynamics framework. [walkerParams = m], the mass.
+
+             (iv) 'runningvar': the walker moves with inertia as above, but
+             its values are also adjusted so as to match the local
+             variance of time series by a multiplicative factor.
+             walkerParams = [m,wl], where m is the inertial mass and wl
+             is the window length.
+
+    :param walkerParams: the parameters for the specified walker, explained above
+
+    :return: include the mean, spread, maximum, minimum, and autocorrelation of
+            the walker's trajectory, the number of crossings between the walker and the
+            original time series, the ratio or difference of some basic summary statistics
+            between the original time series and the walker, an Ansari-Bradley test
+            comparing the distributions of the walker and original time series, and
+            various statistics summarizing properties of the residuals between the
+            walker's trajectory and the original time series.
+
+    """
+
+    # ----------------------------------------------------------------------------------------------------------------------------------
+    # PRELIMINARIES
+    #----------------------------------------------------------------------------------------------------------------------------------
+
+    N = len(y)
+
+    #----------------------------------------------------------------------------------------------------------------------------------
+    # CHECK INPUTS
+    #----------------------------------------------------------------------------------------------------------------------------------
+    if walkerRule == 'runningvar':
+        walkerParams = [1.5, 50]
+    if (len(walkerParams) == 0):
+
+        if walkerRule == 'prop':
+            walkerParams = np.array([0.5])
+        if walkerRule == 'biasprop':
+            walkerParams = np.array([0.1, 0.2])
+        if walkerRule == 'momentum':
+            walkerParams = np.array([2])
+        if walkerRule == 'runningvar':
+            walkerParams = [1.5, 50]
+
+    #----------------------------------------------------------------------------------------------------------------------------------
+    # (1) WALK
+    #----------------------------------------------------------------------------------------------------------------------------------
+
+
+    w = np.zeros(N)
+
+    if walkerRule == 'prop':
+
+        # walker starts at zero and narrows the gap between its position
+        # and the time series value at that point by the proportion given
+        # in walkerParams, to give the value at the subsequent time step
+        if isinstance(walkerParams,list):
+            walkerParams = walkerParams[0]
+        p = walkerParams
+        w[0] = 0
+
+        for i in range(1, N):
+            w[i] = w[i-1] + p*(y[i-1]-w[i-1])
+
+
+    elif walkerRule == 'biasprop':
+        # walker is biased in one or the other direction (i.e., prefers to
+        # go up, or down). Requires a vector of inputs: [p_up, p_down]
+
+        pup = walkerParams[0]
+        pdown = walkerParams[0]
+
+        w[0] = 0
+
+        for i in range (1, N):
+            if y[i] > y[i-1]:
+                w[i] = w[i-1] + pup*(y[i-1]-w[i-1])
+
+            else :
+                w[i] = w[i-1] + pdown*(y[i-1]-w[i-1])
+
+    elif walkerRule == 'momentum':
+        # walker moves as if it had inertia from the previous time step,
+        # i.e., it 'wants' to move the same amount; the time series acts as
+        # a force changing its motion
+
+        m = walkerParams[0] # inertial mass
+
+        w[0] = y[0]
+        w[1] = y[1]
+
+        for i in range(2, N):
+            w_inert = w[i-1] + (w[i-1]-w[i-2])
+            w[i] = w_inert + (y[i] - w_inert)/m # dissipative term
+            #equation of motion (s-s_0 = ut + F/m*t^2)
+            #where the 'force' is F is the change in the original time series at the point
+
+    elif walkerRule == 'runningvar':
+
+        m = walkerParams[0]
+        wl = walkerParams[1]
+
+        w[0] = y[0]
+        w[1] = y[1]
+
+        for i in range(2, N):
+            w_inert = w[i-1] + (w[i-1]-w[i-2])
+            w_mom = w_inert + (y[i] - w_inert)/m #dissipative term from time series
+
+            if i > wl:
+                w[i] = w_mom * (np.std(y[(i-wl):i]))/np.std(w[(i-wl):i])
+
+            else:
+                w[i] = w_mom
+
+
+    else :
+
+        print("Error: Unknown method: " + walkerRule + " for simulating walker on the time series")
+
+
+    #----------------------------------------------------------------------------------------------------------------------------------
+    # (2) STATISITICS ON THE WALK
+    #----------------------------------------------------------------------------------------------------------------------------------
+
+    out = {} # dictionary for storing variables
+
+    # (i) The walk itself -------------------------------------------------------------------------------------------
+
+    out['w_mean'] = np.mean(w)
+    out['w_median'] = np.median(w)
+    out['w_std'] = np.std(w)
+    out['w_ac1'] = CO_AutoCorr(w, 1, method='timedomainstat') # this function call in MATLAB uses method='Fourier', but we don't have that case implemented yet in autoCorr, however this seems to output the same thing
+    out['w_ac2'] = CO_AutoCorr(w, 2, method='timedomainstat')
+    out['w_tau'] = CO_FirstZero(w, 'ac')
+    out['w_min'] = np.min(w)
+    out['w_max'] = np.max(w)
+    out['propzcross'] = sum( np.multiply( w[0:(len(w)-2)], w[1:(len(w)-1)] ) < 0) / (N-1) # np.multiply performs elementwise multiplication like matlab .*
+    # differences between the walk at signal
+
+    # (ii) Differences between the walk at signal -------------------------------------------------------------------
+
+    out['sw_meanabsdiff'] = np.mean(np.abs(y-w))
+    out['sw_taudiff'] = CO_FirstZero(y, 'ac') - CO_FirstZero(w, 'ac')
+    out['sw_stdrat'] = np.std(w)/np.std(y) # will be thse same as w_std for z-scored signal
+    out['sw_ac1rat'] = out['w_ac1']/CO_AutoCorr(y, 1)
+    out['sw_minrat'] = min(w)/min(y)
+    out['sw_maxrat'] = max(w)/max(y)
+    out['sw_propcross'] = sum(np.multiply( w[0:(len(w)-1)] - y[0:(len(y)-1)] , w[1:(len(w))]-y[1:(len(y))]) < 0 )/(N-1) #np.multiply performs elementwise multiplication like matlab .*
+
+    ansari = stats.ansari(w, y)
+    out['sw_ansarib_pval'] = ansari[1]
+
+
+    # r = np.linspace( np.min(np.min(y), np.min(w)), np.max(np.max(y), np.max(w)), 200 )
+    # dy = stats.gaussian_kde(y, r)
+
+
+    # (iii) looking at residuals between time series and walker
+
+    res = w-y
+
+    # CLOSEST FUNCTION TO MATLAB RUNSTEST, found in statsmodels.sandbox.stats.runs
+    # runstest = runs.runstest_2samp(res, groups=2)
+    # out['res_runstest'] = runstest
+
+    out['res_acl'] = CO_AutoCorr(res, lag=1)
+
+
+    return out
+
 def CO_trev(y,tau = 'ac'):
         if tau == 'ac':
             tau = CO_FirstZero(y,'ac')
@@ -1333,7 +1752,10 @@ def SY_LocalGlobal(y,subsetHow = 'l',n = ''):
     out['std'] = np.std(y[r])
     out['median'] = np.median(y[r])
     out['iqr'] = np.absolute((1-stats.iqr(y[r]))/stats.iqr(y))
-    out['skew'] = np.absolute((1-stats.skew(y[r]))/stats.skew(y))
+    if stats.skew(y) == 0:
+        out['skew'] = np.nan
+    else:
+        out['skew'] = np.absolute((1-stats.skew(y[r]))/stats.skew(y))
     out['kurtosis'] = np.absolute((1-stats.kurtosis(y[r]))/stats.kurtosis(y))
     out['ac1'] = np.absolute((1-CO_AutoCorr(y[r],1))/CO_AutoCorr(y,1))
     out['Burstiness'] = np.absolute((1-DN_Burstiness(y[r]))/DN_Burstiness(y))
@@ -1346,8 +1768,10 @@ import itertools
 #@numba.jit(nopython=True,parallel=True)
 def EN_PermEn(y,m = 2,tau = 1):
 
-    x = BF_embed(y,tau,m)
-
+    try:
+        x = BF_embed(y,tau,m)
+    except:
+        return np.nan
 
     Nx = x.shape[0]
 
@@ -1402,6 +1826,70 @@ def DN_TrimmedMean(y,n = 0):
     y = np.sort(y)
     #return stats.trim_mean(y,n) doesn't agree with matlab
     return np.mean(y[trim:N-trim])
+
+def ST_LocalExtrema(y,lorf = 'l',n = ''):
+    if lorf == 'l' and n == '':
+        n = 100
+    elif n == '':
+        n = 5
+
+    N = len(y)
+
+    if lorf == 'l':
+        wl = n
+    elif lorf == 'n':
+        wl = math.floor(N/n)
+    else:
+        wl = CO_FirstZero(y,'ac')
+
+    if wl > N or wl <= 1:
+        #print('window too short or long')
+        return np.nan
+
+    y_buffer = BF_makeBuffer(y,wl).transpose()
+
+    numWindows = y_buffer.shape[1]
+
+    locmax = np.max(y_buffer,axis = 0)
+
+    locmin = np.min(y_buffer,axis = 0)
+
+    abslocmin = np.absolute(locmin)
+
+    exti = np.where(abslocmin > locmax)
+
+    locext = locmax
+
+    locext[exti] = locmin[exti]
+
+    abslocext = np.absolute(locext)
+
+    out = {}
+
+    out['meanrat'] = np.mean(locmax)/np.mean(abslocmin)
+    out['medianrat'] = np.median(locmax)/np.median(abslocmin)
+    out['minmax'] = np.min(locmax)
+    out['minabsmin'] = np.min(abslocmin)
+    out['minmaxonminabsmin'] = np.min(locmax)/np.min(abslocmin)
+    out['meanmax'] = np.mean(locmax)
+    out['meanabsmin'] = np.mean(abslocmin)
+    out['meanext'] = np.mean(locext)
+    out['medianmax'] = np.median(locmax)
+    out['medianabsmin'] = np.median(abslocmin)
+    out['medianext'] = np.median(locext)
+    out['stdmax'] = np.std(locmax,ddof=1)
+    out['stdmin'] = np.std(locmin,ddof=1)
+    out['stdext'] = np.std(locext,ddof=1)
+    #out.zcext = ST_SimpleStats(locext,'zcross');
+    out['meanabsext'] = np.mean(abslocext)
+    out['medianabsext'] = np.median(abslocext)
+    out['diffmaxabsmin'] = np.sum(np.absolute(locmax-abslocmin))/numWindows
+    out['uord'] = np.sum(np.sign(locext))/numWindows #% whether extreme events are more up or down
+    out['maxmaxmed'] = np.max(locmax)/np.median(locmax)
+    out['minminmed'] = np.min(locmin)/np.median(locmin)
+    out['maxabsext'] = np.max(abslocext)/np.median(abslocext)
+
+    return out
 
 def SC_DFA(y):
 

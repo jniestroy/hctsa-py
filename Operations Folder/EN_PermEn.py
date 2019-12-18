@@ -4,8 +4,10 @@ import itertools
 #@numba.jit(nopython=True,parallel=True)
 def EN_PermEn(y,m = 2,tau = 1):
 
-    x = BF_embed(y,tau,m)
-
+    try:
+        x = BF_embed(y,tau,m)
+    except:
+        return np.nan
 
     Nx = x.shape[0]
 

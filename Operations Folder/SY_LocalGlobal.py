@@ -26,7 +26,10 @@ def SY_LocalGlobal(y,subsetHow = 'l',n = ''):
     out['std'] = np.std(y[r])
     out['median'] = np.median(y[r])
     out['iqr'] = np.absolute((1-stats.iqr(y[r]))/stats.iqr(y))
-    out['skew'] = np.absolute((1-stats.skew(y[r]))/stats.skew(y))
+    if stats.skew(y) == 0:
+        out['skew'] = np.nan
+    else:
+        out['skew'] = np.absolute((1-stats.skew(y[r]))/stats.skew(y))
     out['kurtosis'] = np.absolute((1-stats.kurtosis(y[r]))/stats.kurtosis(y))
     out['ac1'] = np.absolute((1-CO_AutoCorr(y[r],1))/CO_AutoCorr(y,1))
     out['Burstiness'] = np.absolute((1-DN_Burstiness(y[r]))/DN_Burstiness(y))

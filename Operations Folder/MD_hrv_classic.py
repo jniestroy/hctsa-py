@@ -56,7 +56,7 @@ def MD_hrv_classic(y):
 
     #calculate PSD, DOES NOT MATCH UP WITH MATLAB -----------------------------------------------------------------
     F, Pxx = signal.periodogram(y, window= np.hanning(N)) #hanning confirmed to do the same thing as hann in matlab, periodogram() is what differs
-
+    
     # calculate spectral measures such as subband spectral power percentage, LF/HF ratio etc.
 
 
@@ -131,7 +131,7 @@ def MD_hrv_classic(y):
     # Poincare plot measures ---------------------------------------------------------------------------
     rmssd = np.std(diffy, ddof=1) #set delta degrees of freedom to 1 to get same result as matlab
     sigma = np.std(y, ddof=1)
-    
+
     out["SD1"] = 1/math.sqrt(2) * rmssd * 1000
     out["SD2"] = math.sqrt(2 * sigma**2 - (1/2) * rmssd**2) * 1000
 

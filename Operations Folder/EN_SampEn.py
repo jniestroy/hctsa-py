@@ -7,15 +7,18 @@ def EN_SampEn(x,m=2,r=.2,scale=True):
     warnings.filterwarnings('ignore')
     if scale:
         r = np.std(x) * r
+
     templates = make_templates(x,m)
+    #print(templates)
     A = 0
     B = 0
     for i in range(templates.shape[0]):
         template = templates[i,:]
-        A = A + np.sum(np.amax(np.abs(templates-template), axis=1) < r) -1
+        A = A + np.sum(np.amax(np.absolute(templates-template), axis=1) < r) -1
         B = B + np.sum(np.amax(np.absolute(templates[:,0:m]-template[0:m]),axis=1) < r) - 1
     if B == 0:
         return {'Sample Entropy':np.nan,"Quadratic Entropy":np.nan}
+    
     return {'Sample Entropy':- np.log(A/B),"Quadratic Entropy": - np.log(A/B) + np.log(2*r)}
 #@numba.jit(nopython=True,parallel=True)
 def make_templates(x,m):
@@ -31,6 +34,7 @@ def make_templates(x,m):
 #         r = r*np.std(y)
 #     M = M + 1
 #     N = len(y)
+#     print('hi')
 #     lastrun = np.zeros(N)
 #     run = np.zeros(N)
 #     A = np.zeros(M)
@@ -65,11 +69,11 @@ def make_templates(x,m):
 #         p[m] = A[m] / B[m-1]
 #         e[m] = -np.log(p[m])
 #     i = 0
-#     out = {'sampen':np.zeros(len(e)),'quadSampEn':np.zeros(len(e))}
-#     for ent in e:
-#         quaden1 = ent + np.log(2*r)
-#         out['sampen'][i] = ent
-#         out['quadSampEn'][i] = quaden1
-#         i = i + 1
-#
+#     # out = {'sampen':np.zeros(len(e)),'quadSampEn':np.zeros(len(e))}
+#     # for ent in e:
+#     #     quaden1 = ent + np.log(2*r)
+#     #     out['sampen'][i] = ent
+#     #     out['quadSampEn'][i] = quaden1
+#     #     i = i + 1
+#     out = {'Sample Entropy':e[1],'Quadratic Entropy':e[1] + np.log(2*r)}
 #     return out
